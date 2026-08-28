@@ -1,22 +1,43 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import Sidebar from '../components/Sidebar';
+import ChannelView from '../components/ChannelView';
+import CompanyHub from '../components/CompanyHub';
+import type { Channel } from '../api/resources';
 import './Workspace.css';
 
+// The authenticated app. Header + sidebar are always present; the main panel
+// shows either the Company Hub or a selected channel.
 export default function Workspace() {
   const { user, logout } = useAuth();
   const socket = useSocket();
   const [connected, setConnected] = useState(false);
+  const [view, setView] = useState<'hub' | 'channel'>('hub');
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
 
   useEffect(() => {
     if (!socket) return;
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
+    if (socket.connected) setConnected(true);
     return () => {
       socket.off('connect');
       socket.off('disconnect');
     };
   }, [socket]);
+
+  function openChannel(channel: Channel) {
+    setActiveChannel(channel);
+    setView('channel');
+  }
+
+  function openHub() {
+    setView('hub');
+    setActiveChannel(null);
+  }
+
+  const activeView = view === 'hub' ? 'hub' : activeChannel?.id || '';
 
   return (
     <div className="ws-shell">
@@ -29,21 +50,25 @@ export default function Workspace() {
           <span className={`ws-status ${connected ? 'is-online' : ''}`}>
             {connected ? 'Connected' : 'Connecting...'}
           </span>
+          <span className="ws-user">{user?.email}</span>
           <button className="ws-logout" onClick={logout}>Sign out</button>
         </div>
       </header>
 
-      <main className="ws-body">
-        <div className="ws-placeholder">
-          <h2>Signed in as {user?.email || 'you'}</h2>
-          <p>Role: {user?.role}</p>
-          <p className="ws-note">
-            Workspace shell is live and the real-time connection is
-            {connected ? ' open' : ' connecting'}. Channels and the Company
-            Hub are next.
-          </p>
+      <div className="ws-main">
+        <Sidebar
+          activeView={activeView}
+          onSelectHub={openHub}
+          onSelectChannel={openChannel}
+        />
+        <div className="ws-panel">
+          {view === 'hub' ? (
+            <CompanyHub />
+          ) : activeChannel ? (
+            <ChannelView channel={activeChannel} />
+          ) : null}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

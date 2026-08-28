@@ -1,0 +1,67 @@
+/* Design tokens for Zibuke Connect.
+   Direction: a calm, fast internal workspace. Deep indigo anchor, warm
+   neutral surfaces, one green accent reserved for presence/success. Chosen
+   to feel like a professional tool that gets out of the way, and to stay
+   light on a low-end device (no heavy gradients or shadows everywhere). */
+
+:root {
+  /* Core palette */
+  --indigo-900: #1e1b4b;
+  --indigo-700: #4338ca;
+  --indigo-600: #4f46e5;
+  --indigo-50:  #eef2ff;
+
+  --ink:        #1a1a2e;
+  --ink-soft:   #4b4b63;
+  --ink-faint:  #8a8aa3;
+
+  --surface:    #ffffff;
+  --surface-2:  #f7f7fb;
+  --surface-3:  #eeeef4;
+  --border:     #e2e2ec;
+
+  --online:     #16a34a;
+  --away:       #d97706;
+  --danger:     #dc2626;
+
+  /* Type */
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Inter', system-ui, sans-serif;
+
+  /* Spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--surface-2);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+/* Visible keyboard focus everywhere, part of the quality floor. */
+:focus-visible {
+  outline: 2px solid var(--indigo-600);
+  outline-offset: 2px;
+}

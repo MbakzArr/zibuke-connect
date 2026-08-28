@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import authRoutes from './modules/auth/auth.routes';
 import departmentsRoutes from './modules/departments/departments.routes';
 import channelsRoutes from './modules/channels/channels.routes';
+import directoryRoutes from './modules/directory/directory.routes';
 import { requireAuth } from './middleware/requireAuth';
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/departments', departmentsRoutes);
 app.use('/api/v1/channels', channelsRoutes);
+app.use('/api/v1/directory', directoryRoutes);
 
 // Quick proof the middleware works, this can be deleted once real
 // protected routes (channels, messaging) exist.

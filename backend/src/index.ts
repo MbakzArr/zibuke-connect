@@ -8,6 +8,8 @@ import departmentsRoutes from './modules/departments/departments.routes';
 import channelsRoutes from './modules/channels/channels.routes';
 import directoryRoutes from './modules/directory/directory.routes';
 import messagingRoutes from './modules/messaging/messaging.routes';
+import notificationsRoutes from './modules/notifications/notifications.routes';
+import announcementsRoutes from './modules/announcements/announcements.routes';
 import { attachSocketServer } from './modules/messaging/socketGateway';
 import { requireAuth } from './middleware/requireAuth';
 
@@ -28,6 +30,8 @@ app.use('/api/v1/departments', departmentsRoutes);
 app.use('/api/v1/channels', channelsRoutes);
 app.use('/api/v1/directory', directoryRoutes);
 app.use('/api/v1/messages', messagingRoutes);
+app.use('/api/v1/notifications', notificationsRoutes);
+app.use('/api/v1/announcements', announcementsRoutes);
 
 app.get('/api/v1/me', requireAuth, (req, res) => {
   res.json({ user: req.user });

@@ -3,7 +3,9 @@ import http from 'http';
 import { socketAuth, AuthedSocket } from './socketAuth';
 import { markOnline, markOffline } from './presence.service';
 import { createMessage } from './messaging.service';
+import { processMentions } from './mentions.service';
 import { getChannel, isMember } from '../channels/channels.service';
+import { setIo } from './realtime';
 
 // Wires Socket.io onto the existing HTTP server. Real-time flow:
 //   - client connects with a token, we authenticate the handshake
@@ -21,8 +23,17 @@ export function attachSocketServer(httpServer: http.Server) {
 
   io.use(socketAuth);
 
+  // Make the io instance available to other modules (announcements, mentions)
+  // so they can push live notifications without importing this gateway.
+  setIo(io);
+
   io.on('connection', async (socket: AuthedSocket) => {
     const user = socket.user!;
+
+    // Every one of a user's sockets joins a room named after their user id,
+    // so a notification can be delivered to all their devices at once.
+    socket.join(`user:${user.userId}`);
+
     await markOnline(user.userId);
 
     // Tell everyone in this org that the user came online.
@@ -77,6 +88,13 @@ export function attachSocketServer(httpServer: http.Server) {
         // Broadcast to everyone currently in the room, including the sender,
         // so all clients render the same server-authoritative message.
         io.to(`channel:${channelId}`).emit('message:new', message);
+
+        // Handle any @mentions: record them and notify the mentioned members.
+        // Done after the broadcast so message delivery is never held up by
+        // mention processing.
+        processMentions(message.id, channelId, user.userId, message.content)
+          .catch((err) => console.error('Mention processing failed:', err));
+
         ack?.({ sent: true, message });
       } catch (err) {
         ack?.({ error: 'Could not send message' });

@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { channelsApi, type Channel, type Message } from '../api/resources';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
+import { colorFor } from '../util/avatarColor';
 
 interface ChannelViewProps {
   channel: Channel;
+  dmTitle?: string; // when set, this is a DM and we show the person's name
 }
 
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -87,34 +89,53 @@ export default function ChannelView({ channel }: ChannelViewProps) {
     <section className="chan">
       <header className="chan-head">
         <h2 className="chan-title">
-          <span className="chan-hash">{channel.is_private ? '🔒' : '#'}</span>
-          {channel.name}
+          {dmTitle ? (
+            <>
+              <span className="chan-dm-icon">@</span>
+              {dmTitle}
+            </>
+          ) : (
+            <>
+              <span className="chan-hash">{channel.is_private ? '🔒' : '#'}</span>
+              {channel.name}
+            </>
+          )}
         </h2>
       </header>
 
       <div className="chan-messages">
-        {messages.map((m) => (
-          <div key={m.id} className="msg">
-            <div className="msg-avatar">
-              {(m.sender_name || '?').charAt(0).toUpperCase()}
-            </div>
-            <div className="msg-body">
-              <div className="msg-meta">
-                <span className="msg-author">{m.sender_name || 'Unknown'}</span>
-                <span className="msg-time">
-                  {new Date(m.created_at).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
-                {m.edited_at && <span className="msg-edited">edited</span>}
+        {messages.map((m, i) => {
+          const mine = m.user_id === user?.id;
+          // Group consecutive messages from the same person: hide the
+          // avatar and name on follow-on messages so a run reads as one block.
+          const prev = messages[i - 1];
+          const grouped = prev && prev.user_id === m.user_id;
+          return (
+            <div key={m.id} className={`row ${mine ? 'row-mine' : 'row-theirs'} ${grouped ? 'row-grouped' : ''}`}>
+              {!mine && !grouped ? (
+                <div className="msg-avatar" style={{ background: colorFor(m.user_id) }}>
+                  {(m.sender_name || '?').charAt(0).toUpperCase()}
+                </div>
+              ) : (
+                <div className="msg-avatar-spacer" />
+              )}
+              <div className="bubble-wrap">
+                {!grouped && (
+                  <div className={`msg-meta ${mine ? 'meta-mine' : ''}`}>
+                    <span className="msg-author">{mine ? 'You' : m.sender_name || 'Unknown'}</span>
+                    <span className="msg-time">
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {m.edited_at && <span className="msg-edited">edited</span>}
+                  </div>
+                )}
+                <div className={`bubble ${mine ? 'bubble-mine' : 'bubble-theirs'} ${m.deleted_at ? 'is-deleted' : ''}`}>
+                  {m.content}
+                </div>
               </div>
-              <div className={`msg-text ${m.deleted_at ? 'is-deleted' : ''}`}>
-                {m.content}
-              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {messages.length === 0 && (
           <div className="chan-empty">
             No messages yet. Say something to start the conversation.
@@ -132,7 +153,7 @@ export default function ChannelView({ channel }: ChannelViewProps) {
           value={draft}
           onChange={(e) => handleTyping(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
-          placeholder={`Message ${channel.is_private ? '' : '#'}${channel.name}`}
+          placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
         />
         <button onClick={send} disabled={!draft.trim()}>Send</button>
       </div>

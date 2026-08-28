@@ -4,8 +4,9 @@ import { socketAuth, AuthedSocket } from './socketAuth';
 import { markOnline, markOffline } from './presence.service';
 import { createMessage } from './messaging.service';
 import { processMentions } from './mentions.service';
-import { getChannel, isMember } from '../channels/channels.service';
+import { getChannel, isMember, getDmRecipient } from '../channels/channels.service';
 import { setIo } from './realtime';
+import { createNotification } from '../notifications/notifications.service';
 
 // Wires Socket.io onto the existing HTTP server. Real-time flow:
 //   - client connects with a token, we authenticate the handshake
@@ -94,6 +95,16 @@ export function attachSocketServer(httpServer: http.Server) {
         // mention processing.
         processMentions(message.id, channelId, user.userId, message.content)
           .catch((err) => console.error('Mention processing failed:', err));
+
+        // If this is a DM, notify the other person so they get a bell even
+        // when they don't have that conversation open. Fire-and-forget.
+        getDmRecipient(channelId, user.userId)
+          .then((recipientId) => {
+            if (recipientId) {
+              return createNotification({ userId: recipientId, type: 'dm', sourceId: message.id });
+            }
+          })
+          .catch((err) => console.error('DM notification failed:', err));
 
         ack?.({ sent: true, message });
       } catch (err) {

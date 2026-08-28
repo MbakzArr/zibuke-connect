@@ -1,15 +1,28 @@
 import { useEffect, useState } from 'react';
-import { channelsApi, type Channel } from '../api/resources';
+import { channelsApi, type Channel, type Dm } from '../api/resources';
 
 interface SidebarProps {
   activeView: string; // 'hub' or a channel id
   onSelectHub: () => void;
   onSelectChannel: (channel: Channel) => void;
+  onSelectDm: (channelId: string, personName: string) => void;
+  onNewDm: () => void;
+  // bumped by the parent when a new DM is opened, so the list refreshes
+  dmRefreshKey: number;
 }
 
-// Left rail: the Company Hub link plus the list of channels the user can see.
-export default function Sidebar({ activeView, onSelectHub, onSelectChannel }: SidebarProps) {
+// Left rail: Company Hub, the channel list, and a SEPARATE Direct Messages
+// section so DMs never get lost among channels.
+export default function Sidebar({
+  activeView,
+  onSelectHub,
+  onSelectChannel,
+  onSelectDm,
+  onNewDm,
+  dmRefreshKey,
+}: SidebarProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [dms, setDms] = useState<Dm[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
 
@@ -18,9 +31,19 @@ export default function Sidebar({ activeView, onSelectHub, onSelectChannel }: Si
     setChannels(data.channels);
   }
 
+  async function loadDms() {
+    const data = await channelsApi.listDms();
+    setDms(data.dms);
+  }
+
   useEffect(() => {
     loadChannels();
   }, []);
+
+  // Reload DMs whenever the parent signals a new one was opened.
+  useEffect(() => {
+    loadDms();
+  }, [dmRefreshKey]);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -45,13 +68,7 @@ export default function Sidebar({ activeView, onSelectHub, onSelectChannel }: Si
       <div className="side-section">
         <div className="side-section-head">
           <span>Channels</span>
-          <button
-            className="side-add"
-            onClick={() => setCreating((c) => !c)}
-            aria-label="Create channel"
-          >
-            +
-          </button>
+          <button className="side-add" onClick={() => setCreating((c) => !c)} aria-label="Create channel">+</button>
         </div>
 
         {creating && (
@@ -78,8 +95,30 @@ export default function Sidebar({ activeView, onSelectHub, onSelectChannel }: Si
               </button>
             </li>
           ))}
-          {channels.length === 0 && (
-            <li className="side-empty">No channels yet. Create one above.</li>
+          {channels.length === 0 && <li className="side-empty">No channels yet.</li>}
+        </ul>
+      </div>
+
+      <div className="side-section">
+        <div className="side-section-head">
+          <span>Direct Messages</span>
+          <button className="side-add" onClick={onNewDm} aria-label="New direct message">+</button>
+        </div>
+
+        <ul className="side-list">
+          {dms.map((dm) => (
+            <li key={dm.channel_id}>
+              <button
+                className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''}`}
+                onClick={() => onSelectDm(dm.channel_id, dm.full_name || 'Direct message')}
+              >
+                <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
+                {dm.full_name || 'Unknown'}
+              </button>
+            </li>
+          ))}
+          {dms.length === 0 && (
+            <li className="side-empty">No direct messages yet. Press + to start one.</li>
           )}
         </ul>
       </div>

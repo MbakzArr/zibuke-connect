@@ -45,6 +45,15 @@ export interface Person {
   department_name: string | null;
 }
 
+
+export interface Dm {
+  channel_id: string;
+  user_id: string;
+  full_name: string | null;
+  status: string;
+  job_title: string | null;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
@@ -63,6 +72,9 @@ export const channelsApi = {
     }),
   join: (id: string) =>
     apiRequest(`/api/v1/channels/${id}/join`, { method: 'POST' }),
+  listDms: () => apiRequest<{ dms: Dm[] }>('/api/v1/channels/dm'),
+  openDm: (userId: string) =>
+    apiRequest<{ channel: Channel }>(`/api/v1/channels/dm/${userId}`, { method: 'POST' }),
   history: (channelId: string, before?: string) => {
     const q = before ? `?before=${encodeURIComponent(before)}` : '';
     return apiRequest<{ messages: Message[] }>(

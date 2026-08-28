@@ -197,3 +197,40 @@ export async function getOrCreateDm(organizationId: string, userA: string, userB
     client.release();
   }
 }
+
+// List a user's direct-message channels, each resolved to the OTHER
+// participant (name, id, presence) so the UI can show "DM with Thabo"
+// instead of the internal channel row. DMs are excluded from the normal
+// channel list on purpose; this is their dedicated lookup.
+export async function listDmsForUser(organizationId: string, userId: string) {
+  const result = await pool.query(
+    `SELECT c.id AS channel_id,
+            other.id AS user_id,
+            p.full_name,
+            other.status,
+            p.job_title
+     FROM channels c
+     JOIN channel_members me ON me.channel_id = c.id AND me.user_id = $2
+     JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
+     JOIN users other ON other.id = them.user_id
+     LEFT JOIN employee_profiles p ON p.user_id = other.id
+     WHERE c.organization_id = $1 AND c.is_dm = true
+     ORDER BY p.full_name ASC`,
+    [organizationId, userId]
+  );
+  return result.rows;
+}
+
+// For a DM channel, return the id of the OTHER member (not the sender).
+// Returns null if the channel isn't a DM or has no other member.
+export async function getDmRecipient(channelId: string, senderId: string): Promise<string | null> {
+  const result = await pool.query(
+    `SELECT them.user_id
+     FROM channels c
+     JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
+     WHERE c.id = $1 AND c.is_dm = true
+     LIMIT 1`,
+    [channelId, senderId]
+  );
+  return result.rows[0]?.user_id || null;
+}

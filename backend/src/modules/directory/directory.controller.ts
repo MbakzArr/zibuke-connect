@@ -4,6 +4,7 @@ import {
   listDirectory,
   getProfile,
   updateOwnProfile,
+  birthdaysToday,
 } from './directory.service';
 
 // Clamp pagination so a caller can't request an unbounded page and pull
@@ -72,5 +73,15 @@ export async function updateMe(req: Request, res: Response) {
   } catch (err) {
     console.error('Update own profile error:', err);
     return res.status(500).json({ error: 'Could not update your profile' });
+  }
+}
+
+export async function birthdays(req: Request, res: Response) {
+  try {
+    const people = await birthdaysToday(req.user!.organizationId);
+    return res.json({ birthdays: people });
+  } catch (err) {
+    console.error('Birthdays error:', err);
+    return res.status(500).json({ error: 'Could not load birthdays' });
   }
 }

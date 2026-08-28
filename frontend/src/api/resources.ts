@@ -54,6 +54,14 @@ export interface Dm {
   job_title: string | null;
 }
 
+
+export interface Birthday {
+  id: string;
+  full_name: string | null;
+  job_title: string | null;
+  department_name: string | null;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
@@ -61,6 +69,11 @@ export interface Notification {
   source_id: string;
   is_read: boolean;
   created_at: string;
+  // Hydrated source detail (present depending on type)
+  message_content?: string | null;
+  message_channel_id?: string | null;
+  sender_name?: string | null;
+  announcement_title?: string | null;
 }
 
 export const channelsApi = {
@@ -96,6 +109,7 @@ export const directoryApi = {
   list: () => apiRequest<{ people: Person[] }>('/api/v1/directory'),
   search: (q: string) =>
     apiRequest<{ results: Person[] }>(`/api/v1/directory/search?q=${encodeURIComponent(q)}`),
+  birthdays: () => apiRequest<{ birthdays: Birthday[] }>('/api/v1/directory/birthdays'),
 };
 
 export const notificationsApi = {

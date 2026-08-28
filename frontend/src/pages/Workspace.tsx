@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useNotifications } from '../context/NotificationsContext';
 import Sidebar from '../components/Sidebar';
 import ChannelView from '../components/ChannelView';
 import CompanyHub from '../components/CompanyHub';
 import NewDmModal from '../components/NewDmModal';
 import NotificationBell from '../components/NotificationBell';
-import type { Channel } from '../api/resources';
+import { channelsApi, type Channel } from '../api/resources';
 import './Workspace.css';
 
 // The authenticated app. Header + sidebar are always present; the main panel
@@ -14,6 +15,7 @@ import './Workspace.css';
 export default function Workspace() {
   const { user, logout } = useAuth();
   const socket = useSocket();
+  const { clearDmUnread } = useNotifications();
   const [connected, setConnected] = useState(false);
   const [view, setView] = useState<'hub' | 'channel'>('hub');
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
@@ -46,6 +48,7 @@ export default function Workspace() {
 
   // Open a DM by its existing channel id (from the sidebar list).
   function openDmByChannel(channelId: string, personName: string) {
+    clearDmUnread(channelId);
     setActiveChannel({
       id: channelId,
       name: personName,
@@ -67,6 +70,34 @@ export default function Workspace() {
     setDmRefreshKey((k) => k + 1); // refresh the sidebar DM list
   }
 
+  // Called when a notification is clicked. We only have the channel id, so
+  // fetch its details (or fall back to a minimal channel) and open it. For a
+  // DM we resolve the other person's name for the title.
+  async function navigateToChannel(channelId: string) {
+    // Check the user's DMs first, so a DM notification opens with the right title.
+    try {
+      const { dms } = await channelsApi.listDms();
+      const dm = dms.find((d) => d.channel_id === channelId);
+      if (dm) {
+        openDmByChannel(channelId, dm.full_name || 'Direct message');
+        return;
+      }
+    } catch {
+      // ignore, fall through to channel handling
+    }
+    // Otherwise treat it as a normal channel.
+    try {
+      const { channels } = await channelsApi.list();
+      const chan = channels.find((c) => c.id === channelId);
+      if (chan) {
+        openChannel(chan);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const activeView = view === 'hub' ? 'hub' : activeChannel?.id || '';
 
   return (
@@ -80,7 +111,7 @@ export default function Workspace() {
           <span className={`ws-status ${connected ? 'is-online' : ''}`}>
             {connected ? 'Connected' : 'Connecting...'}
           </span>
-          <NotificationBell />
+          <NotificationBell onNavigateToChannel={navigateToChannel} />
           <span className="ws-user">{user?.email}</span>
           <button className="ws-logout" onClick={logout}>Sign out</button>
         </div>
@@ -97,7 +128,7 @@ export default function Workspace() {
         />
         <div className="ws-panel">
           {view === 'hub' ? (
-            <CompanyHub />
+            <CompanyHub onOpenChannel={openChannel} />
           ) : activeChannel ? (
             <ChannelView channel={activeChannel} dmTitle={dmTitle} />
           ) : null}

@@ -25,11 +25,40 @@ export async function createNotification(input: CreateNotificationInput) {
   );
   const notification = result.rows[0];
 
+  // Enrich the live payload with source detail so the bell shows a real
+  // preview immediately, matching what the list endpoint returns on reload.
+  const enriched = await hydrateOne(notification);
+
   // Push it live. If the user has no open socket this is a no-op and the
   // notification simply waits in the database.
-  emitToUser(userId, 'notification:new', notification);
+  emitToUser(userId, 'notification:new', enriched);
 
-  return notification;
+  return enriched;
+}
+
+// Attach source detail (message content + sender + channel, or announcement
+// title) to a single notification row.
+async function hydrateOne(n: any) {
+  if (n.type === 'mention' || n.type === 'dm') {
+    const r = await pool.query(
+      `SELECT msg.content AS message_content,
+              msg.channel_id AS message_channel_id,
+              p.full_name AS sender_name
+       FROM messages msg
+       LEFT JOIN employee_profiles p ON p.user_id = msg.user_id
+       WHERE msg.id = $1`,
+      [n.source_id]
+    );
+    return { ...n, ...r.rows[0] };
+  }
+  if (n.type === 'announcement') {
+    const r = await pool.query(
+      `SELECT title AS announcement_title FROM announcements WHERE id = $1`,
+      [n.source_id]
+    );
+    return { ...n, ...r.rows[0] };
+  }
+  return n;
 }
 
 // Bulk create for announcements that target many people at once. One INSERT
@@ -64,12 +93,27 @@ export async function createNotificationsForMany(
 }
 
 export async function listNotifications(userId: string, unreadOnly = false) {
+  // Join each notification to its source so the client can show a real
+  // preview and know where to navigate. Mentions and DMs resolve to the
+  // message (content, channel, sender); announcements resolve to the title.
+  // LEFT JOINs so a notification still returns even if its source was since
+  // deleted.
   const result = await pool.query(
-    `SELECT id, user_id, type, source_id, is_read, created_at
-     FROM notifications
-     WHERE user_id = $1
-       ${unreadOnly ? 'AND is_read = false' : ''}
-     ORDER BY created_at DESC
+    `SELECT n.id, n.user_id, n.type, n.source_id, n.is_read, n.created_at,
+            msg.content        AS message_content,
+            msg.channel_id     AS message_channel_id,
+            sender.full_name   AS sender_name,
+            ann.title          AS announcement_title
+     FROM notifications n
+     LEFT JOIN messages msg
+       ON msg.id = n.source_id AND n.type IN ('mention', 'dm')
+     LEFT JOIN employee_profiles sender
+       ON sender.user_id = msg.user_id
+     LEFT JOIN announcements ann
+       ON ann.id = n.source_id AND n.type = 'announcement'
+     WHERE n.user_id = $1
+       ${unreadOnly ? 'AND n.is_read = false' : ''}
+     ORDER BY n.created_at DESC
      LIMIT 50`,
     [userId]
   );

@@ -12,6 +12,10 @@ interface NotificationsValue {
   notifications: Notification[];
   unreadCount: number;
   markAllRead: () => Promise<void>;
+  // DMs are surfaced in the sidebar, not the bell. These helpers expose the
+  // set of DM channels with unread messages, and clear one when opened.
+  unreadDmChannelIds: Set<string>;
+  clearDmUnread: (channelId: string) => void;
 }
 
 const NotificationsContext = createContext<NotificationsValue | undefined>(undefined);
@@ -42,7 +46,28 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     };
   }, [socket]);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  // The bell shows mentions + announcements only. DMs are surfaced in the
+  // sidebar instead, so they don't count toward the bell badge.
+  const unreadCount = notifications.filter((n) => !n.is_read && n.type !== 'dm').length;
+
+  // DM channels that have at least one unread dm notification, so the sidebar
+  // can badge the person's name.
+  const unreadDmChannelIds = new Set(
+    notifications
+      .filter((n) => n.type === 'dm' && !n.is_read && n.message_channel_id)
+      .map((n) => n.message_channel_id as string)
+  );
+
+  // Mark this channel's DM notifications read locally when the user opens it.
+  // (They're also marked read server-side via markAllRead when the bell is
+  // opened, but opening the DM itself should clear its badge immediately.)
+  function clearDmUnread(channelId: string) {
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.type === 'dm' && n.message_channel_id === channelId ? { ...n, is_read: true } : n
+      )
+    );
+  }
 
   async function markAllRead() {
     await notificationsApi.markAllRead();
@@ -50,7 +75,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead }}>
+    <NotificationsContext.Provider
+      value={{ notifications, unreadCount, markAllRead, unreadDmChannelIds, clearDmUnread }}
+    >
       {children}
     </NotificationsContext.Provider>
   );

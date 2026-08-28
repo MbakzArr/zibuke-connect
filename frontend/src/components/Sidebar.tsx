@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { channelsApi, type Channel, type Dm } from '../api/resources';
+import { useNotifications } from '../context/NotificationsContext';
 
 interface SidebarProps {
   activeView: string; // 'hub' or a channel id
@@ -25,6 +26,7 @@ export default function Sidebar({
   const [dms, setDms] = useState<Dm[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const { unreadDmChannelIds } = useNotifications();
 
   async function loadChannels() {
     const data = await channelsApi.list();
@@ -40,10 +42,12 @@ export default function Sidebar({
     loadChannels();
   }, []);
 
-  // Reload DMs whenever the parent signals a new one was opened.
+  // Reload DMs whenever the parent signals a new one was opened, or when the
+  // set of unread DM channels changes (a new DM from someone not yet in the
+  // list should make them appear).
   useEffect(() => {
     loadDms();
-  }, [dmRefreshKey]);
+  }, [dmRefreshKey, unreadDmChannelIds.size]);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -106,17 +110,21 @@ export default function Sidebar({
         </div>
 
         <ul className="side-list">
-          {dms.map((dm) => (
-            <li key={dm.channel_id}>
-              <button
-                className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''}`}
-                onClick={() => onSelectDm(dm.channel_id, dm.full_name || 'Direct message')}
-              >
-                <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
-                {dm.full_name || 'Unknown'}
-              </button>
-            </li>
-          ))}
+          {dms.map((dm) => {
+            const hasUnread = unreadDmChannelIds.has(dm.channel_id) && activeView !== dm.channel_id;
+            return (
+              <li key={dm.channel_id}>
+                <button
+                  className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
+                  onClick={() => onSelectDm(dm.channel_id, dm.full_name || 'Direct message')}
+                >
+                  <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
+                  <span className="side-dm-name">{dm.full_name || 'Unknown'}</span>
+                  {hasUnread && <span className="side-unread-dot" />}
+                </button>
+              </li>
+            );
+          })}
           {dms.length === 0 && (
             <li className="side-empty">No direct messages yet. Press + to start one.</li>
           )}

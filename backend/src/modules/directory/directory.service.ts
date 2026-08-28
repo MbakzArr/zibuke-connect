@@ -129,3 +129,23 @@ export async function updateOwnProfile(userId: string, input: UpdateProfileInput
   );
   return result.rows[0];
 }
+
+// People in the org whose birthday is TODAY (matched on month + day, any
+// year). Used by the Company Hub "celebrate your people" card. Reads
+// date_of_birth from employee_profiles; returns only name + department, no
+// birth year, so we're not exposing age.
+export async function birthdaysToday(organizationId: string) {
+  const result = await pool.query(
+    `SELECT u.id, p.full_name, p.job_title, d.name AS department_name
+     FROM users u
+     JOIN employee_profiles p ON p.user_id = u.id
+     LEFT JOIN departments d ON d.id = u.department_id
+     WHERE u.organization_id = $1
+       AND p.date_of_birth IS NOT NULL
+       AND EXTRACT(MONTH FROM p.date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
+       AND EXTRACT(DAY FROM p.date_of_birth) = EXTRACT(DAY FROM CURRENT_DATE)
+     ORDER BY p.full_name ASC`,
+    [organizationId]
+  );
+  return result.rows;
+}

@@ -19,3 +19,11 @@ export function emitToUser(userId: string, event: string, payload: unknown) {
   if (!io) return;
   io.to(`user:${userId}`).emit(event, payload);
 }
+
+// Emit an event to everyone currently in a channel's room. Used by webhooks
+// to broadcast an externally-posted message the same way a user message is
+// delivered.
+export function emitToChannel(channelId: string, event: string, payload: unknown) {
+  if (!io) return;
+  io.to(`channel:${channelId}`).emit(event, payload);
+}

@@ -6,8 +6,10 @@ import Sidebar from '../components/Sidebar';
 import ChannelView from '../components/ChannelView';
 import CompanyHub from '../components/CompanyHub';
 import NewDmModal from '../components/NewDmModal';
+import BrowseChannels from '../components/BrowseChannels';
+import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
-import { channelsApi, type Channel } from '../api/resources';
+import { channelsApi, type Channel, type Person } from '../api/resources';
 import './Workspace.css';
 
 // The authenticated app. Header + sidebar are always present; the main panel
@@ -21,6 +23,8 @@ export default function Workspace() {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [dmTitle, setDmTitle] = useState<string | undefined>(undefined);
   const [showNewDm, setShowNewDm] = useState(false);
+  const [showBrowse, setShowBrowse] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [dmRefreshKey, setDmRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -59,6 +63,18 @@ export default function Workspace() {
     });
     setDmTitle(personName);
     setView('channel');
+  }
+
+  // Open a DM with a person (from search results). Uses the DM endpoint,
+  // which reuses an existing conversation.
+  async function openDmWithPerson(person: Person) {
+    try {
+      const { channel } = await channelsApi.openDm(person.id);
+      onDmOpened(channel, person.full_name || person.email);
+    } catch (err) {
+      console.error(err);
+    }
+    setShowSearch(false);
   }
 
   // Called when the modal successfully opens (or reuses) a DM channel.
@@ -108,6 +124,9 @@ export default function Workspace() {
           <span className="ws-name">Zibuke Connect</span>
         </div>
         <div className="ws-header-right">
+          <button className="ws-search-btn" onClick={() => setShowSearch(true)}>
+            🔍 Search
+          </button>
           <span className={`ws-status ${connected ? 'is-online' : ''}`}>
             {connected ? 'Connected' : 'Connecting...'}
           </span>
@@ -124,6 +143,7 @@ export default function Workspace() {
           onSelectChannel={openChannel}
           onSelectDm={openDmByChannel}
           onNewDm={() => setShowNewDm(true)}
+          onBrowse={() => setShowBrowse(true)}
           dmRefreshKey={dmRefreshKey}
         />
         <div className="ws-panel">
@@ -137,6 +157,27 @@ export default function Workspace() {
 
       {showNewDm && (
         <NewDmModal onClose={() => setShowNewDm(false)} onOpened={onDmOpened} />
+      )}
+
+      {showBrowse && (
+        <BrowseChannels
+          onClose={() => setShowBrowse(false)}
+          onOpened={(channel) => {
+            setShowBrowse(false);
+            openChannel(channel);
+          }}
+        />
+      )}
+
+      {showSearch && (
+        <SearchModal
+          onClose={() => setShowSearch(false)}
+          onOpenChannel={(channelId) => {
+            setShowSearch(false);
+            navigateToChannel(channelId);
+          }}
+          onOpenPerson={openDmWithPerson}
+        />
       )}
     </div>
   );

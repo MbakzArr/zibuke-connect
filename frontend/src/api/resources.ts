@@ -76,6 +76,28 @@ export interface Notification {
   announcement_title?: string | null;
 }
 
+
+export interface BrowsableChannel {
+  id: string;
+  name: string;
+  department_id: string | null;
+  is_private: boolean;
+  created_at: string;
+  member_count: string;
+  is_member: boolean;
+}
+
+export interface MessageSearchResult {
+  id: string;
+  channel_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  channel_name: string;
+  is_dm: boolean;
+  sender_name: string | null;
+}
+
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
   create: (name: string, isPrivate = false) =>
@@ -86,6 +108,7 @@ export const channelsApi = {
   join: (id: string) =>
     apiRequest(`/api/v1/channels/${id}/join`, { method: 'POST' }),
   listDms: () => apiRequest<{ dms: Dm[] }>('/api/v1/channels/dm'),
+  browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
   openDm: (userId: string) =>
     apiRequest<{ channel: Channel }>(`/api/v1/channels/dm/${userId}`, { method: 'POST' }),
   history: (channelId: string, before?: string) => {
@@ -94,6 +117,18 @@ export const channelsApi = {
       `/api/v1/messages/channel/${channelId}${q}`
     );
   },
+};
+
+export const messagesApi = {
+  edit: (id: string, content: string) =>
+    apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, {
+      method: 'PATCH',
+      body: { content },
+    }),
+  remove: (id: string) =>
+    apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
+  search: (q: string) =>
+    apiRequest<{ results: MessageSearchResult[] }>(`/api/v1/messages/search?q=${encodeURIComponent(q)}`),
 };
 
 export const announcementsApi = {

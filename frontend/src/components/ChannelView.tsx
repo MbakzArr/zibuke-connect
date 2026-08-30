@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { channelsApi, type Channel, type Message } from '../api/resources';
+import { channelsApi, messagesApi, type Channel, type Message } from '../api/resources';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
@@ -18,6 +18,8 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -46,6 +48,12 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
         setMessages((prev) => [...prev, msg]);
       }
     }
+    // An edit or delete from anyone: replace the message in place.
+    function onUpdated(msg: Message) {
+      if (msg.channel_id === channel.id) {
+        setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
+      }
+    }
     function onTyping(t: { channelId: string; userId: string; typing: boolean }) {
       if (t.channelId === channel.id && t.userId !== user?.id) {
         setTypingUser(t.typing ? t.userId : null);
@@ -53,11 +61,13 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
     }
 
     socket.on('message:new', onNew);
+    socket.on('message:updated', onUpdated);
     socket.on('typing:update', onTyping);
 
     return () => {
       socket.emit('channel:leave', channel.id);
       socket.off('message:new', onNew);
+      socket.off('message:updated', onUpdated);
       socket.off('typing:update', onTyping);
     };
   }, [socket, channel.id, user?.id]);
@@ -66,6 +76,40 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  function startEdit(m: Message) {
+    setEditingId(m.id);
+    setEditDraft(m.content);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft('');
+  }
+
+  async function saveEdit(id: string) {
+    const content = editDraft.trim();
+    if (!content) return;
+    try {
+      const { message } = await messagesApi.edit(id, content);
+      // Update locally right away; the socket broadcast also updates others.
+      setMessages((prev) => prev.map((m) => (m.id === id ? message : m)));
+    } catch (err) {
+      // Leave the edit box open so the user can retry.
+      console.error(err);
+    }
+    setEditingId(null);
+    setEditDraft('');
+  }
+
+  async function remove(id: string) {
+    try {
+      const { message } = await messagesApi.remove(id);
+      setMessages((prev) => prev.map((m) => (m.id === id ? message : m)));
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   function send() {
     const content = draft.trim();
@@ -129,9 +173,36 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
                     {m.edited_at && <span className="msg-edited">edited</span>}
                   </div>
                 )}
-                <div className={`bubble ${mine ? 'bubble-mine' : 'bubble-theirs'} ${m.deleted_at ? 'is-deleted' : ''}`}>
-                  {m.content}
-                </div>
+                {editingId === m.id ? (
+                  <div className="bubble-edit">
+                    <input
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveEdit(m.id);
+                        if (e.key === 'Escape') cancelEdit();
+                      }}
+                      autoFocus
+                    />
+                    <div className="bubble-edit-actions">
+                      <button className="bubble-edit-save" onClick={() => saveEdit(m.id)}>Save</button>
+                      <button className="bubble-edit-cancel" onClick={cancelEdit}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bubble-line">
+                    <div className={`bubble ${mine ? 'bubble-mine' : 'bubble-theirs'} ${m.deleted_at ? 'is-deleted' : ''}`}>
+                      {m.content}
+                    </div>
+                    {/* Edit/delete only on your own, non-deleted messages */}
+                    {mine && !m.deleted_at && (
+                      <div className="msg-actions">
+                        <button className="msg-action" onClick={() => startEdit(m)} title="Edit">✏️</button>
+                        <button className="msg-action" onClick={() => remove(m.id)} title="Delete">🗑️</button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );

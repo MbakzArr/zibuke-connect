@@ -8,6 +8,7 @@ interface SidebarProps {
   onSelectChannel: (channel: Channel) => void;
   onSelectDm: (channelId: string, personName: string) => void;
   onNewDm: () => void;
+  onBrowse: () => void;
   // bumped by the parent when a new DM is opened, so the list refreshes
   dmRefreshKey: number;
 }
@@ -20,6 +21,7 @@ export default function Sidebar({
   onSelectChannel,
   onSelectDm,
   onNewDm,
+  onBrowse,
   dmRefreshKey,
 }: SidebarProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -101,6 +103,7 @@ export default function Sidebar({
           ))}
           {channels.length === 0 && <li className="side-empty">No channels yet.</li>}
         </ul>
+        <button className="side-browse" onClick={onBrowse}>Browse channels</button>
       </div>
 
       <div className="side-section">

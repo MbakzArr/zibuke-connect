@@ -11,7 +11,7 @@ import {
 
 interface SearchModalProps {
   onClose: () => void;
-  onOpenChannel: (channelId: string) => void;
+  onOpenChannel: (channelId: string, messageId?: string) => void;
   onOpenPerson: (person: Person) => void;
   // Jump to an existing channel or DM by its channel id (navigation).
   onOpenPlace: (channelId: string) => void;
@@ -129,7 +129,7 @@ export default function SearchModal({
             <div className="search-group">
               <div className="search-group-head">Messages</div>
               {messages.map((m) => (
-                <button key={m.id} className="search-item" onClick={() => onOpenChannel(m.channel_id)}>
+                <button key={m.id} className="search-item" onClick={() => onOpenChannel(m.channel_id, m.id)}>
                   <span className="search-item-title">{m.content}</span>
                   <span className="search-item-sub">
                     {m.sender_name} in {m.is_dm ? 'a direct message' : `#${m.channel_name}`}

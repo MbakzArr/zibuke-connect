@@ -114,6 +114,14 @@ export interface PlaceDm {
   status: string;
 }
 
+
+export interface ReactionCounts {
+  [emoji: string]: { count: number; reacted: boolean };
+}
+export interface ReactionsMap {
+  [targetId: string]: ReactionCounts;
+}
+
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
   create: (name: string, isPrivate = false) =>
@@ -173,4 +181,16 @@ export const notificationsApi = {
   list: () => apiRequest<{ notifications: Notification[] }>('/api/v1/notifications'),
   markAllRead: () =>
     apiRequest('/api/v1/notifications/read-all', { method: 'PATCH' }),
+};
+
+export const reactionsApi = {
+  list: (targetType: 'announcement' | 'birthday', targetIds: string[]) =>
+    apiRequest<{ reactions: ReactionsMap; allowed: string[] }>(
+      `/api/v1/reactions?targetType=${targetType}&targetIds=${encodeURIComponent(targetIds.join(','))}`
+    ),
+  toggle: (targetType: 'announcement' | 'birthday', targetId: string, emoji: string) =>
+    apiRequest<{ status: 'added' | 'removed' }>('/api/v1/reactions/toggle', {
+      method: 'POST',
+      body: { targetType, targetId, emoji },
+    }),
 };

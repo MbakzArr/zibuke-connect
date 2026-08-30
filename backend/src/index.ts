@@ -11,6 +11,7 @@ import messagingRoutes from './modules/messaging/messaging.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import announcementsRoutes from './modules/announcements/announcements.routes';
 import webhooksRoutes from './modules/webhooks/webhooks.routes';
+import reactionsRoutes from './modules/reactions/reactions.routes';
 import { attachSocketServer } from './modules/messaging/socketGateway';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './docs/openapi';
@@ -48,6 +49,7 @@ app.use('/api/v1/messages', messagingRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/announcements', announcementsRoutes);
 app.use('/api/v1/webhooks', webhooksRoutes);
+app.use('/api/v1/reactions', reactionsRoutes);
 
 app.get('/api/v1/me', requireAuth, (req, res) => {
   res.json({ user: req.user });

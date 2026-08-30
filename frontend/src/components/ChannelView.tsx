@@ -7,12 +7,13 @@ import { colorFor } from '../util/avatarColor';
 interface ChannelViewProps {
   channel: Channel;
   dmTitle?: string; // when set, this is a DM and we show the person's name
+  jumpToId?: string; // when set, scroll to and flash this message after load
 }
 
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle, jumpToId }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -23,8 +24,8 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
-  const [highlightId, setHighlightId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load history whenever the channel changes. History comes back newest
@@ -101,20 +102,83 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
     }
   }
 
-  // Jump to a message from the search results: scroll to it and flash a
-  // highlight. If it's not currently loaded (older than what's in view) we
-  // can't scroll to it, so this is best-effort on loaded messages.
-  function jumpToMessage(id: string) {
-    const el = document.getElementById(`msg-${id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlightId(id);
-      setTimeout(() => setHighlightId(null), 2000);
+  // Jump to a message from the search results. If it's already loaded, scroll
+  // to it. If it's older than what's currently loaded, fetch history back to
+  // its time first so it's in the DOM, then scroll. Either way, flash a
+  // highlight so it's easy to spot.
+  // Scroll to a message by id and flash it. Shared by in-channel search and
+  // the global-search jump (via the jumpToId prop).
+  function scrollToAndFlash(id: string) {
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${id}`);
+      const container = messagesRef.current;
+      if (!el || !container) {
+        return;
+      }
+      // Absolute scroll: position the message near the middle of the
+      // container. offsetTop is relative to the container (its offset parent),
+      // so this works no matter where we're currently scrolled.
+      const target = el.offsetTop - container.clientHeight / 2 + el.clientHeight / 2;
+      container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+
+      // Highlight directly on the element rather than via a CSS animation +
+      // React state, which can fail to re-trigger. Set a bright background,
+      // then fade it out with a transition. Reliable every time.
+      el.style.transition = 'none';
+      el.style.borderRadius = 'var(--radius)';
+      el.style.boxShadow = 'inset 3px 0 0 var(--indigo-600)';
+      el.style.background = '#c9d1ff';
+      void el.offsetWidth; // force reflow so the fade animates
+      el.style.transition = 'background 2s ease-out';
+      el.style.background = 'transparent';
+      window.setTimeout(() => {
+        el.style.boxShadow = '';
+        el.style.borderRadius = '';
+        el.style.transition = '';
+        el.style.background = '';
+      }, 2200);
+    }, 150);
+  }
+
+  // Ensure a message is loaded (fetching older history if needed), then jump.
+  async function loadThenJump(id: string, createdAt?: string) {
+    const alreadyLoaded = messages.some((m) => m.id === id);
+    if (!alreadyLoaded && createdAt) {
+      try {
+        const justAfter = new Date(new Date(createdAt).getTime() + 1000).toISOString();
+        const { messages: older } = await channelsApi.history(channel.id, justAfter);
+        setMessages((prev) => {
+          const byId = new Map<string, Message>();
+          for (const m of older.slice().reverse()) byId.set(m.id, m);
+          for (const m of prev) byId.set(m.id, m);
+          return Array.from(byId.values()).sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
+      } catch {
+        // fall through and try to scroll to whatever's loaded
+      }
     }
+    scrollToAndFlash(id);
+  }
+
+  async function jumpToMessage(result: MessageSearchResult) {
     setSearchOpen(false);
     setSearchQuery('');
     setSearchResults([]);
+    await loadThenJump(result.id, result.created_at);
   }
+
+  // When opened from global search with a target message, jump to it once the
+  // channel's history has loaded. We don't have the message's timestamp here,
+  // so this jumps if it's in the loaded window; recent messages (the common
+  // case) are covered. Runs whenever jumpToId changes.
+  useEffect(() => {
+    if (jumpToId && messages.length > 0) {
+      scrollToAndFlash(jumpToId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToId, messages.length]);
 
   function cancelEdit() {
     setEditingId(null);
@@ -206,7 +270,7 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
                     <div className="chan-search-empty">No matches in this conversation.</div>
                   )}
                   {searchResults.map((r) => (
-                    <button key={r.id} className="chan-search-result" onClick={() => jumpToMessage(r.id)}>
+                    <button key={r.id} className="chan-search-result" onClick={() => jumpToMessage(r)}>
                       <span className="chan-search-result-text">{r.content}</span>
                       <span className="chan-search-result-meta">
                         {r.sender_name} · {new Date(r.created_at).toLocaleDateString()}
@@ -220,7 +284,7 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
         </div>
       </header>
 
-      <div className="chan-messages">
+      <div className="chan-messages" ref={messagesRef}>
         {messages.map((m, i) => {
           const mine = m.user_id === user?.id;
           // Group consecutive messages from the same person: hide the
@@ -231,7 +295,7 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
             <div
               key={m.id}
               id={`msg-${m.id}`}
-              className={`row ${mine ? 'row-mine' : 'row-theirs'} ${grouped ? 'row-grouped' : ''} ${highlightId === m.id ? 'row-highlight' : ''}`}
+              className={`row ${mine ? 'row-mine' : 'row-theirs'} ${grouped ? 'row-grouped' : ''}`}
             >
               {!mine && !grouped ? (
                 <div className="msg-avatar" style={{ background: colorFor(m.user_id) }}>

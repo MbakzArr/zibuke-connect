@@ -3,33 +3,52 @@ import {
   announcementsApi,
   directoryApi,
   channelsApi,
+  reactionsApi,
   type Announcement,
   type Person,
   type Birthday,
   type Channel,
+  type ReactionsMap,
 } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
+import Reactions from './Reactions';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
+  onMessagePerson: (person: Person) => void;
 }
 
 // The landing screen. A richer overview than a bare feed: a greeting, an
 // announcements column, and a right rail with who's online, today's
 // birthdays, and quick access to your channels. Everything here is backed by
 // real data from the API, nothing is mocked.
-export default function CompanyHub({ onOpenChannel }: CompanyHubProps) {
+export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHubProps) {
   const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [birthdays, setBirthdays] = useState<Birthday[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [annReactions, setAnnReactions] = useState<ReactionsMap>({});
+  const [bdayReactions, setBdayReactions] = useState<ReactionsMap>({});
 
   useEffect(() => {
-    announcementsApi.list().then((d) => setAnnouncements(d.announcements));
+    announcementsApi.list().then((d) => {
+      setAnnouncements(d.announcements);
+      // Load reaction counts for these announcements in one call.
+      const ids = d.announcements.map((a) => a.id);
+      if (ids.length > 0) {
+        reactionsApi.list('announcement', ids).then((r) => setAnnReactions(r.reactions));
+      }
+    });
     directoryApi.list().then((d) => setPeople(d.people));
-    directoryApi.birthdays().then((d) => setBirthdays(d.birthdays));
+    directoryApi.birthdays().then((d) => {
+      setBirthdays(d.birthdays);
+      const ids = d.birthdays.map((b) => b.id);
+      if (ids.length > 0) {
+        reactionsApi.list('birthday', ids).then((r) => setBdayReactions(r.reactions));
+      }
+    });
     channelsApi.list().then((d) => setChannels(d.channels));
   }, []);
 
@@ -58,9 +77,29 @@ export default function CompanyHub({ onOpenChannel }: CompanyHubProps) {
                     <span className="hub-avatar" style={{ background: colorFor(b.id) }}>
                       {(b.full_name || '?').charAt(0).toUpperCase()}
                     </span>
-                    <div>
+                    <div className="hub-bday-info">
                       <div className="hub-bday-name">{b.full_name}</div>
                       <div className="hub-bday-note">🎂 Birthday today</div>
+                      <div className="hub-bday-actions">
+                        <Reactions targetType="birthday" targetId={b.id} initial={bdayReactions[b.id]} />
+                        {b.id !== user?.id && (
+                          <button
+                            className="hub-bday-msg"
+                            onClick={() =>
+                              onMessagePerson({
+                                id: b.id,
+                                email: '',
+                                status: 'offline',
+                                full_name: b.full_name,
+                                job_title: b.job_title,
+                                department_name: b.department_name,
+                              })
+                            }
+                          >
+                            Message
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -83,6 +122,7 @@ export default function CompanyHub({ onOpenChannel }: CompanyHubProps) {
                 <div className="hub-ann-meta">
                   {a.author_name} · {new Date(a.created_at).toLocaleDateString()}
                 </div>
+                <Reactions targetType="announcement" targetId={a.id} initial={annReactions[a.id]} />
               </div>
             ))}
           </div>

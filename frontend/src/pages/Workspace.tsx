@@ -22,6 +22,7 @@ export default function Workspace() {
   const [view, setView] = useState<'hub' | 'channel'>('hub');
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [dmTitle, setDmTitle] = useState<string | undefined>(undefined);
+  const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
   const [showNewDm, setShowNewDm] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -48,6 +49,7 @@ export default function Workspace() {
     setView('hub');
     setActiveChannel(null);
     setDmTitle(undefined);
+    setJumpToId(undefined);
   }
 
   // Open a DM by its existing channel id (from the sidebar list).
@@ -158,7 +160,10 @@ export default function Workspace() {
         <Sidebar
           activeView={activeView}
           onSelectHub={openHub}
-          onSelectChannel={openChannel}
+          onSelectChannel={(channel) => {
+            setJumpToId(undefined);
+            openChannel(channel);
+          }}
           onSelectDm={openDmByChannel}
           onNewDm={() => setShowNewDm(true)}
           onBrowse={() => setShowBrowse(true)}
@@ -166,9 +171,9 @@ export default function Workspace() {
         />
         <div className="ws-panel">
           {view === 'hub' ? (
-            <CompanyHub onOpenChannel={openChannel} />
+            <CompanyHub onOpenChannel={openChannel} onMessagePerson={openDmWithPerson} />
           ) : activeChannel ? (
-            <ChannelView channel={activeChannel} dmTitle={dmTitle} />
+            <ChannelView channel={activeChannel} dmTitle={dmTitle} jumpToId={jumpToId} />
           ) : null}
         </div>
       </div>
@@ -190,13 +195,15 @@ export default function Workspace() {
       {showSearch && (
         <SearchModal
           onClose={() => setShowSearch(false)}
-          onOpenChannel={(channelId) => {
+          onOpenChannel={(channelId, messageId) => {
             setShowSearch(false);
+            setJumpToId(messageId);
             navigateToChannel(channelId);
           }}
           onOpenPerson={openDmWithPerson}
           onOpenPlace={(channelId) => {
             setShowSearch(false);
+            setJumpToId(undefined);
             navigateToChannel(channelId);
           }}
           onJoinChannel={async (channelId) => {

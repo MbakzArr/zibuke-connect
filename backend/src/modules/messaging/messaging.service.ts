@@ -124,3 +124,26 @@ function maskIfDeleted(message: any) {
   }
   return message;
 }
+
+// Full-text-ish search over messages the user can actually see: only
+// channels they're a member of, case-insensitive substring match. Excludes
+// deleted messages. Returns the message plus its channel name and sender so
+// results are meaningful without extra lookups.
+export async function searchMessages(userId: string, query: string, limit = 30) {
+  const like = `%${query}%`;
+  const result = await pool.query(
+    `SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at,
+            c.name AS channel_name, c.is_dm,
+            p.full_name AS sender_name
+     FROM messages m
+     JOIN channels c ON c.id = m.channel_id
+     JOIN channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $1
+     LEFT JOIN employee_profiles p ON p.user_id = m.user_id
+     WHERE m.deleted_at IS NULL
+       AND m.content ILIKE $2
+     ORDER BY m.created_at DESC
+     LIMIT $3`,
+    [userId, like, limit]
+  );
+  return result.rows;
+}

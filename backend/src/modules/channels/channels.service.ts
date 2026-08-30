@@ -234,3 +234,25 @@ export async function getDmRecipient(channelId: string, senderId: string): Promi
   );
   return result.rows[0]?.user_id || null;
 }
+
+// All public channels in the org, each flagged with whether the current user
+// is already a member. Powers the "browse channels" view so people can find
+// and join channels they're not in yet. Private channels and DMs are never
+// listed here.
+export async function listBrowsableChannels(organizationId: string, userId: string) {
+  const result = await pool.query(
+    `SELECT c.id, c.name, c.department_id, c.is_private, c.created_at,
+            (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS member_count,
+            EXISTS (
+              SELECT 1 FROM channel_members me
+              WHERE me.channel_id = c.id AND me.user_id = $2
+            ) AS is_member
+     FROM channels c
+     WHERE c.organization_id = $1
+       AND c.is_dm = false
+       AND c.is_private = false
+     ORDER BY c.name ASC`,
+    [organizationId, userId]
+  );
+  return result.rows;
+}

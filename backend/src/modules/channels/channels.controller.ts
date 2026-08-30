@@ -9,6 +9,7 @@ import {
   listMembers,
   getOrCreateDm,
   listDmsForUser,
+  listBrowsableChannels,
 } from './channels.service';
 
 export async function list(req: Request, res: Response) {
@@ -139,5 +140,15 @@ export async function listDms(req: Request, res: Response) {
   } catch (err) {
     console.error('List DMs error:', err);
     return res.status(500).json({ error: 'Could not load direct messages' });
+  }
+}
+
+export async function browse(req: Request, res: Response) {
+  try {
+    const channels = await listBrowsableChannels(req.user!.organizationId, req.user!.userId);
+    return res.json({ channels });
+  } catch (err) {
+    console.error('Browse channels error:', err);
+    return res.status(500).json({ error: 'Could not load channels' });
   }
 }

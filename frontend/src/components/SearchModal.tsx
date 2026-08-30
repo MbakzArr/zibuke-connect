@@ -1,18 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
-import { messagesApi, directoryApi, type MessageSearchResult, type Person } from '../api/resources';
+import {
+  messagesApi,
+  directoryApi,
+  channelsApi,
+  type MessageSearchResult,
+  type Person,
+  type PlaceChannel,
+  type PlaceDm,
+} from '../api/resources';
 
 interface SearchModalProps {
   onClose: () => void;
   onOpenChannel: (channelId: string) => void;
   onOpenPerson: (person: Person) => void;
+  // Jump to an existing channel or DM by its channel id (navigation).
+  onOpenPlace: (channelId: string) => void;
+  // Join a public channel the user isn't in yet, then open it.
+  onJoinChannel: (channelId: string) => void;
 }
 
-// Unified search: messages you can see, and people. Debounced so it doesn't
-// fire on every keystroke.
-export default function SearchModal({ onClose, onOpenChannel, onOpenPerson }: SearchModalProps) {
+// Global search across everything: places (channels + DMs to navigate to),
+// people, and message content. Debounced.
+export default function SearchModal({
+  onClose,
+  onOpenChannel,
+  onOpenPerson,
+  onOpenPlace,
+  onJoinChannel,
+}: SearchModalProps) {
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<MessageSearchResult[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [channels, setChannels] = useState<PlaceChannel[]>([]);
+  const [dms, setDms] = useState<PlaceDm[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -21,18 +41,29 @@ export default function SearchModal({ onClose, onOpenChannel, onOpenPerson }: Se
     if (q.length < 2) {
       setMessages([]);
       setPeople([]);
+      setChannels([]);
+      setDms([]);
       return;
     }
     timer.current = setTimeout(async () => {
       try {
-        const [m, p] = await Promise.all([messagesApi.search(q), directoryApi.search(q)]);
+        const [m, p, places] = await Promise.all([
+          messagesApi.search(q),
+          directoryApi.search(q),
+          channelsApi.searchPlaces(q),
+        ]);
         setMessages(m.results);
         setPeople(p.results);
+        setChannels(places.channels);
+        setDms(places.dms);
       } catch {
         // ignore transient errors while typing
       }
     }, 250);
   }, [query]);
+
+  const hasResults =
+    channels.length > 0 || dms.length > 0 || people.length > 0 || messages.length > 0;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -45,12 +76,41 @@ export default function SearchModal({ onClose, onOpenChannel, onOpenPerson }: Se
           className="modal-search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search messages and people..."
+          placeholder="Search channels, people and messages..."
           autoFocus
         />
         <div className="search-results">
           {query.trim().length < 2 && (
             <p className="modal-empty">Type at least 2 characters to search.</p>
+          )}
+
+          {channels.length > 0 && (
+            <div className="search-group">
+              <div className="search-group-head">Channels</div>
+              {channels.map((c) => (
+                <button
+                  key={c.id}
+                  className="search-item search-item-row"
+                  onClick={() => (c.is_member ? onOpenPlace(c.id) : onJoinChannel(c.id))}
+                >
+                  <span className="search-item-title">
+                    {c.is_private ? '🔒' : '#'} {c.name}
+                  </span>
+                  <span className="search-item-tag">{c.is_member ? 'Open' : 'Join'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {dms.length > 0 && (
+            <div className="search-group">
+              <div className="search-group-head">Direct messages</div>
+              {dms.map((d) => (
+                <button key={d.channel_id} className="search-item" onClick={() => onOpenPlace(d.channel_id)}>
+                  <span className="search-item-title">@ {d.full_name || 'Direct message'}</span>
+                </button>
+              ))}
+            </div>
           )}
 
           {people.length > 0 && (
@@ -79,9 +139,7 @@ export default function SearchModal({ onClose, onOpenChannel, onOpenPerson }: Se
             </div>
           )}
 
-          {query.trim().length >= 2 && people.length === 0 && messages.length === 0 && (
-            <p className="modal-empty">No results.</p>
-          )}
+          {query.trim().length >= 2 && !hasResults && <p className="modal-empty">No results.</p>}
         </div>
       </div>
     </div>

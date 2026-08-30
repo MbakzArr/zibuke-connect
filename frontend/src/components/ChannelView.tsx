@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { channelsApi, messagesApi, type Channel, type Message } from '../api/resources';
+import { channelsApi, messagesApi, type Channel, type Message, type MessageSearchResult } from '../api/resources';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
@@ -20,6 +20,10 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -80,6 +84,36 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
   function startEdit(m: Message) {
     setEditingId(m.id);
     setEditDraft(m.content);
+  }
+
+  // In-channel search: scoped to THIS channel via the channelId param.
+  async function runChannelSearch(q: string) {
+    setSearchQuery(q);
+    if (q.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const { results } = await messagesApi.search(q.trim(), channel.id);
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    }
+  }
+
+  // Jump to a message from the search results: scroll to it and flash a
+  // highlight. If it's not currently loaded (older than what's in view) we
+  // can't scroll to it, so this is best-effort on loaded messages.
+  function jumpToMessage(id: string) {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightId(id);
+      setTimeout(() => setHighlightId(null), 2000);
+    }
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
   }
 
   function cancelEdit() {
@@ -145,6 +179,45 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
             </>
           )}
         </h2>
+        <div className="chan-search">
+          <button
+            className="chan-search-btn"
+            onClick={() => {
+              setSearchOpen((o) => !o);
+              setSearchQuery('');
+              setSearchResults([]);
+            }}
+            title="Search this conversation"
+          >
+            🔍
+          </button>
+          {searchOpen && (
+            <div className="chan-search-panel">
+              <input
+                className="chan-search-input"
+                value={searchQuery}
+                onChange={(e) => runChannelSearch(e.target.value)}
+                placeholder={`Search in ${dmTitle ? dmTitle : '#' + channel.name}`}
+                autoFocus
+              />
+              {searchQuery.trim().length >= 2 && (
+                <div className="chan-search-results">
+                  {searchResults.length === 0 && (
+                    <div className="chan-search-empty">No matches in this conversation.</div>
+                  )}
+                  {searchResults.map((r) => (
+                    <button key={r.id} className="chan-search-result" onClick={() => jumpToMessage(r.id)}>
+                      <span className="chan-search-result-text">{r.content}</span>
+                      <span className="chan-search-result-meta">
+                        {r.sender_name} · {new Date(r.created_at).toLocaleDateString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <div className="chan-messages">
@@ -155,7 +228,11 @@ export default function ChannelView({ channel, dmTitle }: ChannelViewProps) {
           const prev = messages[i - 1];
           const grouped = prev && prev.user_id === m.user_id;
           return (
-            <div key={m.id} className={`row ${mine ? 'row-mine' : 'row-theirs'} ${grouped ? 'row-grouped' : ''}`}>
+            <div
+              key={m.id}
+              id={`msg-${m.id}`}
+              className={`row ${mine ? 'row-mine' : 'row-theirs'} ${grouped ? 'row-grouped' : ''} ${highlightId === m.id ? 'row-highlight' : ''}`}
+            >
               {!mine && !grouped ? (
                 <div className="msg-avatar" style={{ background: colorFor(m.user_id) }}>
                   {(m.sender_name || '?').charAt(0).toUpperCase()}

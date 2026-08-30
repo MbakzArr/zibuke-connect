@@ -10,6 +10,7 @@ import {
   getOrCreateDm,
   listDmsForUser,
   listBrowsableChannels,
+  searchChannelsAndDms,
 } from './channels.service';
 
 export async function list(req: Request, res: Response) {
@@ -150,5 +151,17 @@ export async function browse(req: Request, res: Response) {
   } catch (err) {
     console.error('Browse channels error:', err);
     return res.status(500).json({ error: 'Could not load channels' });
+  }
+}
+
+export async function searchPlaces(req: Request, res: Response) {
+  try {
+    const q = String(req.query.q ?? '').trim();
+    if (q.length < 2) return res.json({ channels: [], dms: [] });
+    const results = await searchChannelsAndDms(req.user!.organizationId, req.user!.userId, q);
+    return res.json(results);
+  } catch (err) {
+    console.error('Search places error:', err);
+    return res.status(500).json({ error: 'Could not search channels' });
   }
 }

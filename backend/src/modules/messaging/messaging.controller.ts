@@ -89,7 +89,9 @@ export async function search(req: Request, res: Response) {
     if (q.length < 2) {
       return res.status(400).json({ error: 'Search query must be at least 2 characters' });
     }
-    const results = await searchMessages(req.user!.userId, q);
+    // Optional channelId scopes the search to one channel (in-channel search).
+    const channelId = req.query.channelId ? String(req.query.channelId) : undefined;
+    const results = await searchMessages(req.user!.userId, q, 30, channelId);
     return res.json({ results });
   } catch (err) {
     console.error('Message search error:', err);

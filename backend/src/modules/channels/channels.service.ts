@@ -256,3 +256,41 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
   );
   return result.rows;
 }
+
+// Search the channels and DMs a user can navigate to, by name. Returns
+// public channels (joinable), channels they're in, and DMs matched by the
+// other person's name. Powers "jump to a place" in global search.
+export async function searchChannelsAndDms(organizationId: string, userId: string, query: string) {
+  const like = `%${query}%`;
+
+  // Channels: public ones, plus private ones the user is a member of, name match.
+  const channels = await pool.query(
+    `SELECT DISTINCT c.id, c.name, c.is_private, c.is_dm,
+            EXISTS (SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = $2) AS is_member
+     FROM channels c
+     LEFT JOIN channel_members me ON me.channel_id = c.id AND me.user_id = $2
+     WHERE c.organization_id = $1
+       AND c.is_dm = false
+       AND c.name ILIKE $3
+       AND (c.is_private = false OR me.user_id IS NOT NULL)
+     ORDER BY c.name ASC
+     LIMIT 10`,
+    [organizationId, userId, like]
+  );
+
+  // DMs: match on the other participant's name.
+  const dms = await pool.query(
+    `SELECT c.id AS channel_id, other.id AS user_id, p.full_name, other.status
+     FROM channels c
+     JOIN channel_members me ON me.channel_id = c.id AND me.user_id = $2
+     JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
+     JOIN users other ON other.id = them.user_id
+     LEFT JOIN employee_profiles p ON p.user_id = other.id
+     WHERE c.organization_id = $1 AND c.is_dm = true AND p.full_name ILIKE $3
+     ORDER BY p.full_name ASC
+     LIMIT 10`,
+    [organizationId, userId, like]
+  );
+
+  return { channels: channels.rows, dms: dms.rows };
+}

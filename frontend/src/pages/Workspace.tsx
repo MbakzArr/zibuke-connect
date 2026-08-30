@@ -112,6 +112,24 @@ export default function Workspace() {
     } catch {
       // ignore
     }
+    // Fallback: resolve from the browsable (public) channel list, so a channel
+    // just joined via search opens even if the member list is momentarily stale.
+    try {
+      const { channels } = await channelsApi.browse();
+      const c = channels.find((ch) => ch.id === channelId);
+      if (c) {
+        openChannel({
+          id: c.id,
+          name: c.name,
+          department_id: c.department_id,
+          is_private: c.is_private,
+          created_by: '',
+          created_at: c.created_at,
+        });
+      }
+    } catch {
+      // ignore
+    }
   }
 
   const activeView = view === 'hub' ? 'hub' : activeChannel?.id || '';
@@ -177,6 +195,19 @@ export default function Workspace() {
             navigateToChannel(channelId);
           }}
           onOpenPerson={openDmWithPerson}
+          onOpenPlace={(channelId) => {
+            setShowSearch(false);
+            navigateToChannel(channelId);
+          }}
+          onJoinChannel={async (channelId) => {
+            setShowSearch(false);
+            try {
+              await channelsApi.join(channelId);
+            } catch {
+              // may already be a member; ignore
+            }
+            navigateToChannel(channelId);
+          }}
         />
       )}
     </div>

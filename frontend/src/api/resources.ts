@@ -98,6 +98,22 @@ export interface MessageSearchResult {
   sender_name: string | null;
 }
 
+
+export interface PlaceChannel {
+  id: string;
+  name: string;
+  is_private: boolean;
+  is_dm: boolean;
+  is_member: boolean;
+}
+
+export interface PlaceDm {
+  channel_id: string;
+  user_id: string;
+  full_name: string | null;
+  status: string;
+}
+
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
   create: (name: string, isPrivate = false) =>
@@ -109,6 +125,8 @@ export const channelsApi = {
     apiRequest(`/api/v1/channels/${id}/join`, { method: 'POST' }),
   listDms: () => apiRequest<{ dms: Dm[] }>('/api/v1/channels/dm'),
   browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
+  searchPlaces: (q: string) =>
+    apiRequest<{ channels: PlaceChannel[]; dms: PlaceDm[] }>(`/api/v1/channels/search?q=${encodeURIComponent(q)}`),
   openDm: (userId: string) =>
     apiRequest<{ channel: Channel }>(`/api/v1/channels/dm/${userId}`, { method: 'POST' }),
   history: (channelId: string, before?: string) => {
@@ -127,8 +145,12 @@ export const messagesApi = {
     }),
   remove: (id: string) =>
     apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
-  search: (q: string) =>
-    apiRequest<{ results: MessageSearchResult[] }>(`/api/v1/messages/search?q=${encodeURIComponent(q)}`),
+  search: (q: string, channelId?: string) => {
+    const c = channelId ? `&channelId=${channelId}` : '';
+    return apiRequest<{ results: MessageSearchResult[] }>(
+      `/api/v1/messages/search?q=${encodeURIComponent(q)}${c}`
+    );
+  },
 };
 
 export const announcementsApi = {

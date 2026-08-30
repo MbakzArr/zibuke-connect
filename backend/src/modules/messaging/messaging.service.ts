@@ -128,9 +128,26 @@ function maskIfDeleted(message: any) {
 // Full-text-ish search over messages the user can actually see: only
 // channels they're a member of, case-insensitive substring match. Excludes
 // deleted messages. Returns the message plus its channel name and sender so
-// results are meaningful without extra lookups.
-export async function searchMessages(userId: string, query: string, limit = 30) {
+// results are meaningful without extra lookups. When channelId is given, the
+// search is scoped to just that one channel (in-channel search); the
+// membership JOIN still applies, so scoping can't be used to reach a channel
+// you're not in.
+export async function searchMessages(
+  userId: string,
+  query: string,
+  limit = 30,
+  channelId?: string
+) {
   const like = `%${query}%`;
+  const params: any[] = [userId, like];
+  let channelFilter = '';
+  if (channelId) {
+    params.push(channelId);
+    channelFilter = `AND m.channel_id = $${params.length}`;
+  }
+  params.push(limit);
+  const limitParam = `$${params.length}`;
+
   const result = await pool.query(
     `SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at,
             c.name AS channel_name, c.is_dm,
@@ -141,9 +158,10 @@ export async function searchMessages(userId: string, query: string, limit = 30) 
      LEFT JOIN employee_profiles p ON p.user_id = m.user_id
      WHERE m.deleted_at IS NULL
        AND m.content ILIKE $2
+       ${channelFilter}
      ORDER BY m.created_at DESC
-     LIMIT $3`,
-    [userId, like, limit]
+     LIMIT ${limitParam}`,
+    params
   );
   return result.rows;
 }

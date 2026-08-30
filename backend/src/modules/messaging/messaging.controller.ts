@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
-import { getMessages, editMessage, deleteMessage } from './messaging.service';
+import { getMessages, editMessage, deleteMessage, searchMessages } from './messaging.service';
 import { getChannel, isMember } from '../channels/channels.service';
+import { emitToChannel } from './realtime';
 
 // REST endpoints for message history and edit/delete. Live sending happens
 // over the socket, but history loading and edits work over plain HTTP so
@@ -46,6 +47,8 @@ export async function edit(req: Request, res: Response) {
     }
 
     const message = await editMessage(req.params.id, req.user!.userId, content.trim());
+    // Broadcast the edit so everyone viewing the channel sees it live.
+    emitToChannel(message.channel_id, 'message:updated', message);
     return res.json({ message });
   } catch (err: any) {
     if (err.message === 'NOT_FOUND') {
@@ -65,6 +68,8 @@ export async function edit(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   try {
     const message = await deleteMessage(req.params.id, req.user!.userId);
+    // Broadcast the deletion so the masked message updates for everyone live.
+    emitToChannel(message.channel_id, 'message:updated', message);
     return res.json({ message });
   } catch (err: any) {
     if (err.message === 'NOT_FOUND') {
@@ -75,5 +80,19 @@ export async function remove(req: Request, res: Response) {
     }
     console.error('Delete message error:', err);
     return res.status(500).json({ error: 'Could not delete message' });
+  }
+}
+
+export async function search(req: Request, res: Response) {
+  try {
+    const q = String(req.query.q ?? '').trim();
+    if (q.length < 2) {
+      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    }
+    const results = await searchMessages(req.user!.userId, q);
+    return res.json({ results });
+  } catch (err) {
+    console.error('Message search error:', err);
+    return res.status(500).json({ error: 'Could not search messages' });
   }
 }

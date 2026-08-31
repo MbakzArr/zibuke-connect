@@ -1,6 +1,14 @@
 import { Request, Response } from 'express';
 import { toggleReaction, getReactions, ALLOWED_EMOJI } from './reactions.service';
-import { broadcastToOrg } from '../messaging/realtime';
+import { broadcastToOrg, emitToChannel } from '../messaging/realtime';
+import { pool } from '../../db/pool';
+
+// Look up which channel a message belongs to, so a message reaction can be
+// broadcast to just that channel's members.
+async function getChannelIdForMessage(messageId: string): Promise<string | null> {
+  const r = await pool.query('SELECT channel_id FROM messages WHERE id = $1', [messageId]);
+  return r.rows[0]?.channel_id || null;
+}
 
 export async function toggle(req: Request, res: Response) {
   try {
@@ -8,7 +16,7 @@ export async function toggle(req: Request, res: Response) {
     if (!targetType || !targetId || !emoji) {
       return res.status(400).json({ error: 'targetType, targetId and emoji are required' });
     }
-    if (targetType !== 'announcement' && targetType !== 'birthday') {
+    if (targetType !== 'announcement' && targetType !== 'birthday' && targetType !== 'message') {
       return res.status(400).json({ error: 'Invalid targetType' });
     }
     const result = await toggleReaction(
@@ -18,18 +26,24 @@ export async function toggle(req: Request, res: Response) {
       targetId,
       emoji
     );
-    // Broadcast fresh counts for this target so everyone's UI updates live.
+    // Broadcast fresh counts so other clients update live.
     const counts = await getReactions(
       req.user!.organizationId,
       req.user!.userId,
       targetType,
       [targetId]
     );
-    broadcastToOrg(req.user!.organizationId, 'reaction:update', {
-      targetType,
-      targetId,
-      counts: counts[targetId] || {},
-    });
+    const payload = { targetType, targetId, counts: counts[targetId] || {} };
+
+    if (targetType === 'message') {
+      // A message reaction is only relevant to that message's channel, so
+      // broadcast to the channel room, not the whole org.
+      const channelId = await getChannelIdForMessage(targetId);
+      if (channelId) emitToChannel(channelId, 'reaction:update', payload);
+    } else {
+      // Announcements/birthdays are org-wide surfaces.
+      broadcastToOrg(req.user!.organizationId, 'reaction:update', payload);
+    }
     return res.json({ status: result });
   } catch (err: any) {
     if (err.message === 'INVALID_EMOJI') {
@@ -43,7 +57,7 @@ export async function toggle(req: Request, res: Response) {
 export async function listForTargets(req: Request, res: Response) {
   try {
     const targetType = String(req.query.targetType ?? '');
-    if (targetType !== 'announcement' && targetType !== 'birthday') {
+    if (targetType !== 'announcement' && targetType !== 'birthday' && targetType !== 'message') {
       return res.status(400).json({ error: 'Invalid targetType' });
     }
     // targetIds passed as a comma-separated list.

@@ -58,15 +58,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       .map((n) => n.message_channel_id as string)
   );
 
-  // Mark this channel's DM notifications read locally when the user opens it.
-  // (They're also marked read server-side via markAllRead when the bell is
-  // opened, but opening the DM itself should clear its badge immediately.)
+  // Mark this channel's DM notifications read locally AND on the server, so
+  // the unread dot doesn't come back after a refresh.
   function clearDmUnread(channelId: string) {
     setNotifications((prev) =>
       prev.map((n) =>
         n.type === 'dm' && n.message_channel_id === channelId ? { ...n, is_read: true } : n
       )
     );
+    notificationsApi.markDmRead(channelId).catch(() => {
+      // best-effort; the local clear still hides it this session
+    });
   }
 
   async function markAllRead() {

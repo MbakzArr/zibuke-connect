@@ -8,7 +8,7 @@ import { pool } from '../../db/pool';
 // (no free emoji picker). Validated server-side so only these can be stored.
 const ALLOWED_EMOJI = ['🎉', '👍', '❤️', '🥳', '👏'];
 
-type TargetType = 'announcement' | 'birthday';
+type TargetType = 'announcement' | 'birthday' | 'message';
 
 // Toggle a reaction: add it if absent, remove it if the user already reacted
 // with that emoji on that target. Returns 'added' or 'removed'.

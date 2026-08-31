@@ -6,7 +6,7 @@ import { useSocket } from '../context/SocketContext';
 const EMOJI = ['🎉', '👍', '❤️', '🥳', '👏'];
 
 interface ReactionsProps {
-  targetType: 'announcement' | 'birthday';
+  targetType: 'announcement' | 'birthday' | 'message';
   targetId: string;
   initial?: ReactionCounts;
 }
@@ -20,6 +20,13 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
   const [counts, setCounts] = useState<ReactionCounts>(initial || {});
   const [pickerOpen, setPickerOpen] = useState(false);
   const socket = useSocket();
+
+  // The `initial` counts often arrive AFTER this component first mounts (the
+  // parent loads them asynchronously). useState only reads initial once, so
+  // sync when it changes, otherwise reactions look empty until a live update.
+  useEffect(() => {
+    if (initial) setCounts(initial);
+  }, [initial]);
 
   // Live update: when anyone reacts to this target, refresh its counts. The
   // server sends the full fresh count set, but it computes "reacted" from the

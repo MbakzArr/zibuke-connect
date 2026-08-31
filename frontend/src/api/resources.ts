@@ -211,14 +211,16 @@ export const notificationsApi = {
   list: () => apiRequest<{ notifications: Notification[] }>('/api/v1/notifications'),
   markAllRead: () =>
     apiRequest('/api/v1/notifications/read-all', { method: 'PATCH' }),
+  markDmRead: (channelId: string) =>
+    apiRequest(`/api/v1/notifications/dm/${channelId}/read`, { method: 'PATCH' }),
 };
 
 export const reactionsApi = {
-  list: (targetType: 'announcement' | 'birthday', targetIds: string[]) =>
+  list: (targetType: 'announcement' | 'birthday' | 'message', targetIds: string[]) =>
     apiRequest<{ reactions: ReactionsMap; allowed: string[] }>(
       `/api/v1/reactions?targetType=${targetType}&targetIds=${encodeURIComponent(targetIds.join(','))}`
     ),
-  toggle: (targetType: 'announcement' | 'birthday', targetId: string, emoji: string) =>
+  toggle: (targetType: 'announcement' | 'birthday' | 'message', targetId: string, emoji: string) =>
     apiRequest<{ status: 'added' | 'removed' }>('/api/v1/reactions/toggle', {
       method: 'POST',
       body: { targetType, targetId, emoji },

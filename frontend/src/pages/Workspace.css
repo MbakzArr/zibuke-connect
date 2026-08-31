@@ -586,3 +586,13 @@
 @media (max-width: 720px) {
   .ws-account-name { display: none; }
 }
+
+/* ---- Message reactions (hover-reveal add button) ---- */
+.msg-reactions { margin-top: 2px; }
+.msg-reactions .reactions { margin-top: 2px; }
+/* Hide the "React" add button until the message row is hovered; existing
+   reaction pills stay visible so people can see and toggle them. */
+.msg-reactions .reaction-add-wrap { opacity: 0; transition: opacity 0.12s; }
+.row:hover .msg-reactions .reaction-add-wrap { opacity: 1; }
+/* Align my own message reactions to the right, like the bubbles. */
+.row-mine .msg-reactions .reactions { justify-content: flex-end; }

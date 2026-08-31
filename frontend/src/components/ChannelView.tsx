@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { channelsApi, messagesApi, type Channel, type Message, type MessageSearchResult } from '../api/resources';
+import { channelsApi, messagesApi, reactionsApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
 import MembersModal from './MembersModal';
 import ProfileModal from './ProfileModal';
+import Reactions from './Reactions';
 
 interface ChannelViewProps {
   channel: Channel;
@@ -20,6 +21,7 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: Ch
   const socket = useSocket();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [msgReactions, setMsgReactions] = useState<ReactionsMap>({});
   const [draft, setDraft] = useState('');
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -39,7 +41,17 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: Ch
     let cancelled = false;
     async function load() {
       const data = await channelsApi.history(channel.id);
-      if (!cancelled) setMessages(data.messages.slice().reverse());
+      if (!cancelled) {
+        const msgs = data.messages.slice().reverse();
+        setMessages(msgs);
+        // Load reactions for these messages in one call.
+        const ids = msgs.filter((m) => !m.deleted_at).map((m) => m.id);
+        if (ids.length > 0) {
+          reactionsApi.list('message', ids).then((r) => {
+            if (!cancelled) setMsgReactions(r.reactions);
+          });
+        }
+      }
     }
     load();
     return () => {
@@ -354,6 +366,12 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: Ch
                         <button className="msg-action" onClick={() => remove(m.id)} title="Delete">🗑️</button>
                       </div>
                     )}
+                  </div>
+                )}
+                {/* Message reactions: show on hover (or always if it has any) */}
+                {!m.deleted_at && editingId !== m.id && (
+                  <div className="msg-reactions">
+                    <Reactions targetType="message" targetId={m.id} initial={msgReactions[m.id]} />
                   </div>
                 )}
               </div>

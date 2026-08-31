@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { listNotifications, markRead, markAllRead } from './notifications.service';
+import { listNotifications, markRead, markAllRead, markDmReadForChannel } from './notifications.service';
 
 export async function list(req: Request, res: Response) {
   try {
@@ -31,6 +31,16 @@ export async function readAll(req: Request, res: Response) {
     return res.json({ read: true });
   } catch (err) {
     console.error('Mark all read error:', err);
+    return res.status(500).json({ error: 'Could not update notifications' });
+  }
+}
+
+export async function readDmChannel(req: Request, res: Response) {
+  try {
+    await markDmReadForChannel(req.user!.userId, req.params.channelId);
+    return res.json({ read: true });
+  } catch (err) {
+    console.error('Mark DM read error:', err);
     return res.status(500).json({ error: 'Could not update notifications' });
   }
 }

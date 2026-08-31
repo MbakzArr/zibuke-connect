@@ -138,3 +138,17 @@ export async function markAllRead(userId: string) {
   );
   return true;
 }
+
+// Mark a user's DM notifications for a specific channel as read. Called when
+// they open that DM, so the unread dot doesn't come back on refresh (which
+// was happening because clearing it only client-side left the DB unread).
+export async function markDmReadForChannel(userId: string, channelId: string) {
+  await pool.query(
+    `UPDATE notifications
+     SET is_read = true
+     WHERE user_id = $1 AND type = 'dm' AND is_read = false
+       AND source_id IN (SELECT id FROM messages WHERE channel_id = $2)`,
+    [userId, channelId]
+  );
+  return true;
+}

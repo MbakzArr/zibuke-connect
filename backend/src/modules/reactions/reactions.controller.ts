@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { toggleReaction, getReactions, ALLOWED_EMOJI } from './reactions.service';
+import { broadcastToOrg } from '../messaging/realtime';
 
 export async function toggle(req: Request, res: Response) {
   try {
@@ -17,6 +18,18 @@ export async function toggle(req: Request, res: Response) {
       targetId,
       emoji
     );
+    // Broadcast fresh counts for this target so everyone's UI updates live.
+    const counts = await getReactions(
+      req.user!.organizationId,
+      req.user!.userId,
+      targetType,
+      [targetId]
+    );
+    broadcastToOrg(req.user!.organizationId, 'reaction:update', {
+      targetType,
+      targetId,
+      counts: counts[targetId] || {},
+    });
     return res.json({ status: result });
   } catch (err: any) {
     if (err.message === 'INVALID_EMOJI') {

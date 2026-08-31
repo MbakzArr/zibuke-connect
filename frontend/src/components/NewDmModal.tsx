@@ -20,7 +20,9 @@ export default function NewDmModal({ onClose, onOpened }: NewDmModalProps) {
   }, []);
 
   // Don't offer yourself as a DM target.
-  const others = people.filter((p) => p.id !== user?.id);
+  // Include everyone, including yourself ("notes to self"). Mark self so it's
+  // clearly labelled rather than looking like a duplicate.
+  const others = people;
   const filtered = query.trim()
     ? others.filter((p) =>
         (p.full_name || p.email).toLowerCase().includes(query.toLowerCase())
@@ -54,7 +56,9 @@ export default function NewDmModal({ onClose, onOpened }: NewDmModalProps) {
                   {(p.full_name || '?').charAt(0).toUpperCase()}
                 </span>
                 <span className="modal-person-info">
-                  <span className="modal-person-name">{p.full_name || p.email}</span>
+                  <span className="modal-person-name">
+                    {p.full_name || p.email}{p.id === user?.id ? ' (you)' : ''}
+                  </span>
                   {p.job_title && <span className="modal-person-role">{p.job_title}</span>}
                 </span>
                 <span className={`modal-dot ${p.status === 'online' ? 'is-on' : ''}`} />

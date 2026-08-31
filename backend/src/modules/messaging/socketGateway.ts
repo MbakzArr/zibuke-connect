@@ -34,6 +34,8 @@ export function attachSocketServer(httpServer: http.Server) {
     // Every one of a user's sockets joins a room named after their user id,
     // so a notification can be delivered to all their devices at once.
     socket.join(`user:${user.userId}`);
+    // Also join an org-wide room, for broadcasts like live reaction counts.
+    socket.join(`org:${user.organizationId}`);
 
     await markOnline(user.userId);
 

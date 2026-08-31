@@ -190,6 +190,7 @@ export const messagesApi = {
 
 export const announcementsApi = {
   list: () => apiRequest<{ announcements: Announcement[] }>('/api/v1/announcements'),
+  get: (id: string) => apiRequest<{ announcement: Announcement }>(`/api/v1/announcements/${id}`),
   create: (title: string, content: string) =>
     apiRequest<{ announcement: Announcement }>('/api/v1/announcements', {
       method: 'POST',

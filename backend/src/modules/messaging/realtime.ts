@@ -27,3 +27,11 @@ export function emitToChannel(channelId: string, event: string, payload: unknown
   if (!io) return;
   io.to(`channel:${channelId}`).emit(event, payload);
 }
+
+// Emit to everyone in an organization. Sockets join an "org:<id>" room on
+// connect. Used for org-wide live updates like reaction counts on
+// announcements and birthdays, which aren't tied to one channel.
+export function broadcastToOrg(organizationId: string, event: string, payload: unknown) {
+  if (!io) return;
+  io.to(`org:${organizationId}`).emit(event, payload);
+}

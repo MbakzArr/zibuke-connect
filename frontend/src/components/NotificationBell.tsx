@@ -6,12 +6,14 @@ interface NotificationBellProps {
   // Called when a notification is clicked and it points somewhere navigable
   // (a channel or DM). The Workspace decides how to open it.
   onNavigateToChannel: (channelId: string) => void;
+  // Called to open an announcement by its id.
+  onOpenAnnouncement: (announcementId: string) => void;
 }
 
 // Header bell. Shows an unread badge and a dropdown of recent notifications,
-// each with a real preview. Mention and DM items are clickable and jump to
-// the conversation.
-export default function NotificationBell({ onNavigateToChannel }: NotificationBellProps) {
+// each with a real preview. Mention and DM items jump to the conversation;
+// announcement items open the announcement.
+export default function NotificationBell({ onNavigateToChannel, onOpenAnnouncement }: NotificationBellProps) {
   const { notifications, unreadCount, markAllRead } = useNotifications();
   const [open, setOpen] = useState(false);
 
@@ -41,15 +43,20 @@ export default function NotificationBell({ onNavigateToChannel }: NotificationBe
       return {
         title: 'New announcement',
         preview: n.announcement_title || null,
-        clickable: false,
+        // Announcements are now clickable: they open the announcement.
+        clickable: true,
       };
     }
     return { title: 'Notification', preview: null, clickable: false };
   }
 
   function handleClick(n: Notification) {
-    const { clickable } = describe(n);
-    if (clickable && n.message_channel_id) {
+    if (n.type === 'announcement') {
+      onOpenAnnouncement(n.source_id);
+      setOpen(false);
+      return;
+    }
+    if (n.message_channel_id) {
       onNavigateToChannel(n.message_channel_id);
       setOpen(false);
     }

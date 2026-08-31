@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { listAnnouncements, createAnnouncement } from './announcements.service';
+import { listAnnouncements, createAnnouncement, getAnnouncement } from './announcements.service';
 
 export async function list(req: Request, res: Response) {
   try {
@@ -41,5 +41,16 @@ export async function create(req: Request, res: Response) {
     }
     console.error('Create announcement error:', err);
     return res.status(500).json({ error: 'Could not create announcement' });
+  }
+}
+
+export async function getOne(req: Request, res: Response) {
+  try {
+    const ann = await getAnnouncement(req.user!.organizationId, req.params.id);
+    if (!ann) return res.status(404).json({ error: 'Announcement not found' });
+    return res.json({ announcement: ann });
+  } catch (err) {
+    console.error('Get announcement error:', err);
+    return res.status(500).json({ error: 'Could not load announcement' });
   }
 }

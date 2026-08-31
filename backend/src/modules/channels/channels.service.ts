@@ -136,11 +136,10 @@ export async function listMembers(channelId: string) {
 // Find an existing 1-to-1 DM channel between two users, or create one.
 // This is what makes "message this person" work without a separate DM table.
 export async function getOrCreateDm(organizationId: string, userA: string, userB: string) {
-  if (userA === userB) {
-    throw new Error('CANNOT_DM_SELF');
-  }
+  // Self-DM ("notes to self") is allowed: a DM channel with just you in it.
+  const isSelf = userA === userB;
 
-  // Confirm the other user is in the same org.
+  // Confirm the other user is in the same org (for self, that's just userA).
   const other = await pool.query(
     'SELECT id FROM users WHERE id = $1 AND organization_id = $2',
     [userB, organizationId]
@@ -149,27 +148,38 @@ export async function getOrCreateDm(organizationId: string, userA: string, userB
     throw new Error('USER_NOT_IN_ORG');
   }
 
-  // Look for an existing DM that has exactly these two members and no others.
-  const existing = await pool.query(
-    `SELECT c.id
-     FROM channels c
-     JOIN channel_members cm ON cm.channel_id = c.id
-     WHERE c.organization_id = $1 AND c.is_dm = true
-     GROUP BY c.id
-     HAVING COUNT(*) = 2
-        AND bool_or(cm.user_id = $2) = true
-        AND bool_or(cm.user_id = $3) = true`,
-    [organizationId, userA, userB]
-  );
+  // Find an existing DM. For a self-DM it's a is_dm channel whose only member
+  // is userA; for a normal DM it's the channel with exactly these two members.
+  let existing;
+  if (isSelf) {
+    existing = await pool.query(
+      `SELECT c.id
+       FROM channels c
+       JOIN channel_members cm ON cm.channel_id = c.id
+       WHERE c.organization_id = $1 AND c.is_dm = true
+       GROUP BY c.id
+       HAVING COUNT(*) = 1 AND bool_or(cm.user_id = $2) = true`,
+      [organizationId, userA]
+    );
+  } else {
+    existing = await pool.query(
+      `SELECT c.id
+       FROM channels c
+       JOIN channel_members cm ON cm.channel_id = c.id
+       WHERE c.organization_id = $1 AND c.is_dm = true
+       GROUP BY c.id
+       HAVING COUNT(*) = 2
+          AND bool_or(cm.user_id = $2) = true
+          AND bool_or(cm.user_id = $3) = true`,
+      [organizationId, userA, userB]
+    );
+  }
 
   if (existing.rows.length > 0) {
     return getChannel(organizationId, existing.rows[0].id);
   }
 
-  // None exists, create it. The channel name is a stable, sorted pair of
-  // the two ids, it's never shown to users (the UI shows the other person's
-  // name) but it keeps the row meaningful if you inspect the table.
-  const sortedName = [userA, userB].sort().join(':');
+  const sortedName = isSelf ? `self:${userA}` : [userA, userB].sort().join(':');
 
   const client = await pool.connect();
   try {
@@ -183,10 +193,17 @@ export async function getOrCreateDm(organizationId: string, userA: string, userB
     );
     const channel = channelResult.rows[0];
 
-    await client.query(
-      'INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2), ($1, $3)',
-      [channel.id, userA, userB]
-    );
+    if (isSelf) {
+      await client.query(
+        'INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)',
+        [channel.id, userA]
+      );
+    } else {
+      await client.query(
+        'INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2), ($1, $3)',
+        [channel.id, userA, userB]
+      );
+    }
 
     await client.query('COMMIT');
     return channel;

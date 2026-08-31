@@ -82,3 +82,18 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
 
   return announcement;
 }
+
+// Fetch a single announcement by id, scoped to the caller's org.
+export async function getAnnouncement(organizationId: string, announcementId: string) {
+  const result = await pool.query(
+    `SELECT a.id, a.department_id, a.title, a.content, a.created_by, a.created_at,
+            d.name AS department_name,
+            p.full_name AS author_name
+     FROM announcements a
+     LEFT JOIN departments d ON d.id = a.department_id
+     LEFT JOIN employee_profiles p ON p.user_id = a.created_by
+     WHERE a.organization_id = $1 AND a.id = $2`,
+    [organizationId, announcementId]
+  );
+  return result.rows[0] || null;
+}

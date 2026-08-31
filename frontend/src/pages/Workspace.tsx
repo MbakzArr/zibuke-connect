@@ -9,7 +9,8 @@ import NewDmModal from '../components/NewDmModal';
 import BrowseChannels from '../components/BrowseChannels';
 import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
-import { channelsApi, type Channel, type Person } from '../api/resources';
+import AnnouncementModal from '../components/AnnouncementModal';
+import { channelsApi, announcementsApi, type Channel, type Person, type Announcement } from '../api/resources';
 import './Workspace.css';
 
 // The authenticated app. Header + sidebar are always present; the main panel
@@ -23,6 +24,7 @@ export default function Workspace() {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [dmTitle, setDmTitle] = useState<string | undefined>(undefined);
   const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
+  const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
   const [showNewDm, setShowNewDm] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -134,6 +136,16 @@ export default function Workspace() {
     }
   }
 
+  // Open an announcement (from a notification) by fetching it and showing the modal.
+  async function openAnnouncementById(announcementId: string) {
+    try {
+      const { announcement } = await announcementsApi.get(announcementId);
+      setOpenAnnouncement(announcement);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   const activeView = view === 'hub' ? 'hub' : activeChannel?.id || '';
 
   return (
@@ -151,7 +163,7 @@ export default function Workspace() {
           <span className={`ws-status ${connected ? 'is-online' : ''}`}>
             {connected ? 'Connected' : 'Connecting...'}
           </span>
-          <NotificationBell onNavigateToChannel={navigateToChannel} />
+          <NotificationBell onNavigateToChannel={navigateToChannel} onOpenAnnouncement={openAnnouncementById} />
           <span className="ws-user">{user?.email}</span>
           <button className="ws-logout" onClick={logout}>Sign out</button>
         </div>
@@ -230,6 +242,12 @@ export default function Workspace() {
             }
             navigateToChannel(channelId);
           }}
+        />
+      )}
+      {openAnnouncement && (
+        <AnnouncementModal
+          announcement={openAnnouncement}
+          onClose={() => setOpenAnnouncement(null)}
         />
       )}
     </div>

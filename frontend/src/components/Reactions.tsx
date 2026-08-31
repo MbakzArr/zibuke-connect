@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { reactionsApi, type ReactionCounts } from '../api/resources';
+import { useSocket } from '../context/SocketContext';
 
 // The fixed, minimal emoji set. Matches the server's allowed list.
 const EMOJI = ['🎉', '👍', '❤️', '🥳', '👏'];
@@ -13,10 +14,38 @@ interface ReactionsProps {
 // One reaction per person per item. At rest you see reactions that have a
 // count. If YOU haven't reacted, a "React" button offers the palette. Once you
 // pick one, the palette/button goes away - to change it you remove yours
-// first, which brings the button back. Swappable, never stacked.
+// first, which brings the button back. Swappable, never stacked. Counts update
+// live for everyone via the reaction:update socket event.
 export default function Reactions({ targetType, targetId, initial }: ReactionsProps) {
   const [counts, setCounts] = useState<ReactionCounts>(initial || {});
   const [pickerOpen, setPickerOpen] = useState(false);
+  const socket = useSocket();
+
+  // Live update: when anyone reacts to this target, refresh its counts. The
+  // server sends the full fresh count set, but it computes "reacted" from the
+  // reactor's perspective, so we only trust the counts and keep our own
+  // "reacted" flags intact by merging.
+  useEffect(() => {
+    if (!socket) return;
+    function onUpdate(p: { targetType: string; targetId: string; counts: ReactionCounts }) {
+      if (p.targetType !== targetType || p.targetId !== targetId) return;
+      setCounts((prev) => {
+        const merged: ReactionCounts = {};
+        for (const e of EMOJI) {
+          const incoming = p.counts[e];
+          const mine = prev[e]?.reacted || false;
+          if (incoming) {
+            merged[e] = { count: incoming.count, reacted: mine };
+          }
+        }
+        return merged;
+      });
+    }
+    socket.on('reaction:update', onUpdate);
+    return () => {
+      socket.off('reaction:update', onUpdate);
+    };
+  }, [socket, targetType, targetId]);
 
   // Which emoji (if any) this user has currently reacted with.
   const myEmoji = EMOJI.find((e) => counts[e]?.reacted) || null;

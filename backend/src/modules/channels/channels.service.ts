@@ -220,19 +220,26 @@ export async function getOrCreateDm(organizationId: string, userA: string, userB
 // instead of the internal channel row. DMs are excluded from the normal
 // channel list on purpose; this is their dedicated lookup.
 export async function listDmsForUser(organizationId: string, userId: string) {
+  // For each DM the user is in, resolve "the other person". For a normal DM
+  // that's the other member; for a self-DM (only you), it resolves to you, so
+  // "notes to self" shows up in the list too. COALESCE picks the other member
+  // if there is one, otherwise falls back to the user themselves.
   const result = await pool.query(
     `SELECT c.id AS channel_id,
-            other.id AS user_id,
-            p.full_name,
-            other.status,
-            p.job_title
+            COALESCE(other.id, me_user.id) AS user_id,
+            COALESCE(op.full_name, mp.full_name) AS full_name,
+            COALESCE(other.status, me_user.status) AS status,
+            COALESCE(op.job_title, mp.job_title) AS job_title,
+            (other.id IS NULL) AS is_self
      FROM channels c
      JOIN channel_members me ON me.channel_id = c.id AND me.user_id = $2
-     JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
-     JOIN users other ON other.id = them.user_id
-     LEFT JOIN employee_profiles p ON p.user_id = other.id
+     JOIN users me_user ON me_user.id = $2
+     LEFT JOIN employee_profiles mp ON mp.user_id = me_user.id
+     LEFT JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
+     LEFT JOIN users other ON other.id = them.user_id
+     LEFT JOIN employee_profiles op ON op.user_id = other.id
      WHERE c.organization_id = $1 AND c.is_dm = true
-     ORDER BY p.full_name ASC`,
+     ORDER BY full_name ASC`,
     [organizationId, userId]
   );
   return result.rows;

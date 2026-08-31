@@ -52,6 +52,7 @@ export interface Dm {
   full_name: string | null;
   status: string;
   job_title: string | null;
+  is_self?: boolean;
 }
 
 

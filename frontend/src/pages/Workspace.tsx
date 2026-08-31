@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useNotifications } from '../context/NotificationsContext';
+import { colorFor } from '../util/avatarColor';
 import Sidebar from '../components/Sidebar';
 import ChannelView from '../components/ChannelView';
 import CompanyHub from '../components/CompanyHub';
@@ -10,7 +11,7 @@ import BrowseChannels from '../components/BrowseChannels';
 import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
-import { channelsApi, announcementsApi, type Channel, type Person, type Announcement } from '../api/resources';
+import { channelsApi, announcementsApi, directoryApi, type Channel, type Person, type Announcement } from '../api/resources';
 import './Workspace.css';
 
 // The authenticated app. Header + sidebar are always present; the main panel
@@ -25,6 +26,39 @@ export default function Workspace() {
   const [dmTitle, setDmTitle] = useState<string | undefined>(undefined);
   const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
+  const [myName, setMyName] = useState<string>('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+
+  // Drag-to-resize the sidebar. Mousedown on the handle starts a drag that
+  // updates the width live, clamped so it stays usable.
+  function startResize(e: React.MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    function onMove(ev: MouseEvent) {
+      const next = startWidth + (ev.clientX - startX);
+      setSidebarWidth(Math.min(420, Math.max(180, next)));
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    }
+    // Prevent text selection while dragging.
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  // Fetch the logged-in user's display name once, for the account chip, so
+  // it's always clear whose account is active.
+  useEffect(() => {
+    if (!user) return;
+    directoryApi.profile(user.id).then((d) => {
+      setMyName(d.profile.full_name || user.email || 'You');
+    }).catch(() => setMyName(user.email || 'You'));
+  }, [user]);
   const [showNewDm, setShowNewDm] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -152,6 +186,14 @@ export default function Workspace() {
     <div className="ws-shell">
       <header className="ws-header">
         <div className="ws-brand">
+          <button
+            className="ws-sidebar-toggle"
+            onClick={() => setSidebarOpen((o) => !o)}
+            title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            aria-label="Toggle sidebar"
+          >
+            ☰
+          </button>
           <span className="ws-mark">Z</span>
           <span className="ws-name">Zibuke Connect</span>
         </div>
@@ -164,24 +206,34 @@ export default function Workspace() {
             {connected ? 'Connected' : 'Connecting...'}
           </span>
           <NotificationBell onNavigateToChannel={navigateToChannel} onOpenAnnouncement={openAnnouncementById} />
-          <span className="ws-user">{user?.email}</span>
+          <div className="ws-account" title={`Signed in as ${myName}`}>
+            <span className="ws-account-avatar" style={{ background: user ? colorFor(user.id) : '#4f46e5' }}>
+              {(myName || 'Y').charAt(0).toUpperCase()}
+            </span>
+            <span className="ws-account-name">{myName}</span>
+          </div>
           <button className="ws-logout" onClick={logout}>Sign out</button>
         </div>
       </header>
 
       <div className="ws-main">
-        <Sidebar
-          activeView={activeView}
-          onSelectHub={openHub}
-          onSelectChannel={(channel) => {
-            setJumpToId(undefined);
-            openChannel(channel);
-          }}
-          onSelectDm={openDmByChannel}
-          onNewDm={() => setShowNewDm(true)}
-          onBrowse={() => setShowBrowse(true)}
-          dmRefreshKey={dmRefreshKey}
-        />
+        {sidebarOpen && (
+          <div className="ws-sidebar-wrap" style={{ width: sidebarWidth }}>
+            <Sidebar
+              activeView={activeView}
+              onSelectHub={openHub}
+              onSelectChannel={(channel) => {
+                setJumpToId(undefined);
+                openChannel(channel);
+              }}
+              onSelectDm={openDmByChannel}
+              onNewDm={() => setShowNewDm(true)}
+              onBrowse={() => setShowBrowse(true)}
+              dmRefreshKey={dmRefreshKey}
+            />
+            <div className="ws-resize-handle" onMouseDown={startResize} title="Drag to resize" />
+          </div>
+        )}
         <div className="ws-panel">
           {view === 'hub' ? (
             <CompanyHub onOpenChannel={openChannel} onMessagePerson={openDmWithPerson} />

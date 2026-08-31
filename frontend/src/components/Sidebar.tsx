@@ -119,10 +119,10 @@ export default function Sidebar({
               <li key={dm.channel_id}>
                 <button
                   className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
-                  onClick={() => onSelectDm(dm.channel_id, dm.full_name || 'Direct message')}
+                  onClick={() => onSelectDm(dm.channel_id, (dm.full_name || 'Direct message') + (dm.is_self ? ' (you)' : ''))}
                 >
                   <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
-                  <span className="side-dm-name">{dm.full_name || 'Unknown'}</span>
+                  <span className="side-dm-name">{dm.full_name || 'Unknown'}{dm.is_self ? ' (you)' : ''}</span>
                   {hasUnread && <span className="side-unread-dot" />}
                 </button>
               </li>

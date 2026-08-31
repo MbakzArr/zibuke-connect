@@ -30,11 +30,22 @@
 .ws-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface); }
 
 /* ---- Sidebar ---- */
+/* Resizable wrapper holds the drag width; sidebar fills it. */
+.ws-sidebar-wrap {
+  position: relative; flex-shrink: 0; height: 100%;
+  display: flex; border-right: 1px solid var(--border);
+}
 .sidebar {
-  width: 240px; flex-shrink: 0;
-  background: var(--surface-2); border-right: 1px solid var(--border);
+  flex: 1; min-width: 0; height: 100%;
+  background: var(--surface-2);
   padding: var(--sp-4) var(--sp-3); overflow-y: auto;
 }
+/* Thin grab strip on the sidebar's right edge. */
+.ws-resize-handle {
+  position: absolute; top: 0; right: -3px; width: 6px; height: 100%;
+  cursor: col-resize; z-index: 5;
+}
+.ws-resize-handle:hover { background: var(--indigo-600); opacity: 0.25; }
 .side-item {
   display: flex; align-items: center; gap: var(--sp-3);
   width: 100%; padding: 8px 10px; border: none; background: transparent;
@@ -193,7 +204,7 @@
 
 /* ---- Responsive: stack on narrow screens (mobile / low-end) ---- */
 @media (max-width: 720px) {
-  .sidebar { width: 180px; }
+  .ws-sidebar-wrap { width: 180px !important; }
   .hub-grid { grid-template-columns: 1fr; }
   .hub-col-narrow { order: -1; }
   .ws-user { display: none; }
@@ -553,3 +564,25 @@
 }
 .ann-modal-content { font-size: 15px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
 .ann-modal-meta { font-size: 12px; color: var(--ink-faint); margin-top: var(--sp-3); }
+
+/* ---- Sidebar toggle + account chip ---- */
+.ws-sidebar-toggle {
+  border: none; background: transparent; font-size: 18px; color: var(--ink-soft);
+  width: 32px; height: 32px; border-radius: 8px; margin-right: 4px;
+}
+.ws-sidebar-toggle:hover { background: var(--surface-2); }
+
+.ws-account {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: 3px 10px 3px 3px; border: 1px solid var(--border); border-radius: 20px;
+  background: var(--surface-2);
+}
+.ws-account-avatar {
+  width: 26px; height: 26px; border-radius: 50%; color: #fff;
+  display: grid; place-items: center; font-weight: 700; font-size: 12px; flex-shrink: 0;
+}
+.ws-account-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+@media (max-width: 720px) {
+  .ws-account-name { display: none; }
+}

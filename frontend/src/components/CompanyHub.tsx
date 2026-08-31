@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
 import Reactions from './Reactions';
+import AnnouncementModal from './AnnouncementModal';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
@@ -31,6 +32,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
   const [channels, setChannels] = useState<Channel[]>([]);
   const [annReactions, setAnnReactions] = useState<ReactionsMap>({});
   const [bdayReactions, setBdayReactions] = useState<ReactionsMap>({});
+  const [openAnn, setOpenAnn] = useState<Announcement | null>(null);
 
   useEffect(() => {
     announcementsApi.list().then((d) => {
@@ -117,11 +119,13 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
             {announcements.length === 0 && <p className="hub-muted">No announcements yet.</p>}
             {announcements.map((a) => (
               <div key={a.id} className="hub-ann">
-                <div className="hub-ann-title">{a.title}</div>
-                <div className="hub-ann-body">{a.content}</div>
-                <div className="hub-ann-meta">
-                  {a.author_name} · {new Date(a.created_at).toLocaleDateString()}
-                </div>
+                <button className="hub-ann-open" onClick={() => setOpenAnn(a)}>
+                  <div className="hub-ann-title">{a.title}</div>
+                  <div className="hub-ann-body">{a.content}</div>
+                  <div className="hub-ann-meta">
+                    {a.author_name} · {new Date(a.created_at).toLocaleDateString()}
+                  </div>
+                </button>
                 <Reactions targetType="announcement" targetId={a.id} initial={annReactions[a.id]} />
               </div>
             ))}
@@ -169,6 +173,13 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
           </div>
         </div>
       </div>
+      {openAnn && (
+        <AnnouncementModal
+          announcement={openAnn}
+          reactions={annReactions[openAnn.id]}
+          onClose={() => setOpenAnn(null)}
+        />
+      )}
     </section>
   );
 }

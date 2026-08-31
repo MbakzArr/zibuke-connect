@@ -94,7 +94,14 @@ export async function editMessage(messageId: string, userId: string, content: st
      RETURNING id, channel_id, user_id, content, created_at, edited_at, deleted_at`,
     [messageId, userId, content]
   );
-  return result.rows[0];
+  const message = result.rows[0];
+  // Attach the sender's name so the client renders the author, not "Unknown".
+  const sender = await pool.query(
+    'SELECT full_name FROM employee_profiles WHERE user_id = $1',
+    [message.user_id]
+  );
+  message.sender_name = sender.rows[0]?.full_name || null;
+  return message;
 }
 
 export async function deleteMessage(messageId: string, userId: string) {
@@ -115,7 +122,15 @@ export async function deleteMessage(messageId: string, userId: string) {
      RETURNING id, channel_id, user_id, content, created_at, edited_at, deleted_at`,
     [messageId, userId]
   );
-  return maskIfDeleted(result.rows[0]);
+  const message = maskIfDeleted(result.rows[0]);
+  // Keep the sender's name on the deleted stub so history stays consistent
+  // (author still shown above the "[message deleted]" placeholder).
+  const sender = await pool.query(
+    'SELECT full_name FROM employee_profiles WHERE user_id = $1',
+    [message.user_id]
+  );
+  message.sender_name = sender.rows[0]?.full_name || null;
+  return message;
 }
 
 function maskIfDeleted(message: any) {

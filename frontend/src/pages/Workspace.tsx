@@ -174,7 +174,21 @@ export default function Workspace() {
           {view === 'hub' ? (
             <CompanyHub onOpenChannel={openChannel} onMessagePerson={openDmWithPerson} />
           ) : activeChannel ? (
-            <ChannelView channel={activeChannel} dmTitle={dmTitle} jumpToId={jumpToId} />
+            <ChannelView
+              channel={activeChannel}
+              dmTitle={dmTitle}
+              jumpToId={jumpToId}
+              onOpenDm={(userId, name) =>
+                openDmWithPerson({
+                  id: userId,
+                  email: '',
+                  status: 'offline',
+                  full_name: name,
+                  job_title: null,
+                  department_name: null,
+                })
+              }
+            />
           ) : null}
         </div>
       </div>

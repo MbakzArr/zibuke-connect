@@ -122,6 +122,31 @@ export interface ReactionsMap {
   [targetId: string]: ReactionCounts;
 }
 
+
+export interface ChannelMember {
+  id: string;
+  email: string;
+  status: string;
+  full_name: string | null;
+  job_title: string | null;
+  joined_at: string;
+}
+
+export interface FullProfile {
+  id: string;
+  email: string;
+  status: string;
+  full_name: string | null;
+  job_title: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  timezone: string | null;
+  department_name: string | null;
+  address: string | null;
+  hire_date: string | null;
+  manager_name: string | null;
+}
+
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
   create: (name: string, isPrivate = false) =>
@@ -133,6 +158,8 @@ export const channelsApi = {
     apiRequest(`/api/v1/channels/${id}/join`, { method: 'POST' }),
   listDms: () => apiRequest<{ dms: Dm[] }>('/api/v1/channels/dm'),
   browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
+  members: (channelId: string) =>
+    apiRequest<{ members: ChannelMember[] }>(`/api/v1/channels/${channelId}/members`),
   searchPlaces: (q: string) =>
     apiRequest<{ channels: PlaceChannel[]; dms: PlaceDm[] }>(`/api/v1/channels/search?q=${encodeURIComponent(q)}`),
   openDm: (userId: string) =>
@@ -175,6 +202,7 @@ export const directoryApi = {
   search: (q: string) =>
     apiRequest<{ results: Person[] }>(`/api/v1/directory/search?q=${encodeURIComponent(q)}`),
   birthdays: () => apiRequest<{ birthdays: Birthday[] }>('/api/v1/directory/birthdays'),
+  profile: (userId: string) => apiRequest<{ profile: FullProfile }>(`/api/v1/directory/${userId}`),
 };
 
 export const notificationsApi = {

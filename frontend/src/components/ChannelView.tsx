@@ -3,17 +3,20 @@ import { channelsApi, messagesApi, type Channel, type Message, type MessageSearc
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
+import MembersModal from './MembersModal';
+import ProfileModal from './ProfileModal';
 
 interface ChannelViewProps {
   channel: Channel;
   dmTitle?: string; // when set, this is a DM and we show the person's name
   jumpToId?: string; // when set, scroll to and flash this message after load
+  onOpenDm?: (userId: string, name: string) => void; // open a DM (from a profile)
 }
 
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel, dmTitle, jumpToId }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,6 +24,8 @@ export default function ChannelView({ channel, dmTitle, jumpToId }: ChannelViewP
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  const [showMembers, setShowMembers] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
@@ -243,7 +248,13 @@ export default function ChannelView({ channel, dmTitle, jumpToId }: ChannelViewP
             </>
           )}
         </h2>
-        <div className="chan-search">
+        <div className="chan-head-actions">
+          {!dmTitle && (
+            <button className="chan-members-btn" onClick={() => setShowMembers(true)} title="View members">
+              👥 Members
+            </button>
+          )}
+          <div className="chan-search">
           <button
             className="chan-search-btn"
             onClick={() => {
@@ -281,6 +292,7 @@ export default function ChannelView({ channel, dmTitle, jumpToId }: ChannelViewP
               )}
             </div>
           )}
+          </div>
         </div>
       </header>
 
@@ -369,6 +381,33 @@ export default function ChannelView({ channel, dmTitle, jumpToId }: ChannelViewP
         />
         <button onClick={send} disabled={!draft.trim()}>Send</button>
       </div>
+
+      {showMembers && (
+        <MembersModal
+          channelId={channel.id}
+          channelName={channel.name}
+          onClose={() => setShowMembers(false)}
+          onViewProfile={(userId) => {
+            setShowMembers(false);
+            setProfileUserId(userId);
+          }}
+        />
+      )}
+
+      {profileUserId && (
+        <ProfileModal
+          userId={profileUserId}
+          onClose={() => setProfileUserId(null)}
+          onMessage={
+            onOpenDm
+              ? (userId, name) => {
+                  setProfileUserId(null);
+                  onOpenDm(userId, name);
+                }
+              : undefined
+          }
+        />
+      )}
     </section>
   );
 }

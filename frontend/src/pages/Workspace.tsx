@@ -144,8 +144,9 @@ export default function Workspace() {
           <span className="ws-name">Zibuke Connect</span>
         </div>
         <div className="ws-header-right">
-          <button className="ws-search-btn" onClick={() => setShowSearch(true)}>
-            🔍 Search
+          <button className="ws-search-field" onClick={() => setShowSearch(true)}>
+            <span className="ws-search-icon">🔍</span>
+            <span className="ws-search-placeholder">Search Zibuke</span>
           </button>
           <span className={`ws-status ${connected ? 'is-online' : ''}`}>
             {connected ? 'Connected' : 'Connecting...'}

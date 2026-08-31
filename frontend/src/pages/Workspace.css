@@ -355,12 +355,21 @@
   border-radius: var(--radius-sm); font-size: 12px; color: var(--ink-soft);
 }
 
-/* ---- Search button in header ---- */
-.ws-search-btn {
-  padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px;
-  background: var(--surface-2); font-size: 13px; color: var(--ink-soft);
+/* ---- Search field in header ---- */
+.ws-search-field {
+  display: flex; align-items: center; gap: var(--sp-2);
+  width: 280px; padding: 7px 14px; border: 1px solid var(--border);
+  border-radius: 20px; background: var(--surface-2); text-align: left;
 }
-.ws-search-btn:hover { background: var(--surface-3); }
+.ws-search-field:hover { background: var(--surface-3); }
+.ws-search-icon { font-size: 13px; opacity: 0.7; }
+.ws-search-placeholder { font-size: 13px; color: var(--ink-faint); }
+
+/* Narrow screens: shrink the field so it doesn't crowd the header */
+@media (max-width: 720px) {
+  .ws-search-field { width: auto; }
+  .ws-search-placeholder { display: none; }
+}
 
 /* ---- Browse channels button ---- */
 .side-browse {

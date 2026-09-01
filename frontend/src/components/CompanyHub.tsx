@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
 import Reactions from './Reactions';
 import AnnouncementModal from './AnnouncementModal';
+import PeopleDirectoryModal from './PeopleDirectoryModal';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
@@ -73,6 +74,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   const [peopleExpanded, setPeopleExpanded] = useState(false);
   const [channelsExpanded, setChannelsExpanded] = useState(false);
   const [recentExpanded, setRecentExpanded] = useState(false);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
   const CAP = 5; // lists longer than this get a "Show more" toggle
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -285,6 +287,33 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
               </button>
             )}
           </div>
+
+          {/* Your Day sits directly under Announcements, not at the bottom of
+              the page - the right column (Recent Chats etc) can grow and
+              push things down, but this stays put right here. */}
+          <div className="hub-card hub-day-card hub-card--blue">
+            <div className="hub-card-head">
+              <h3>📅 Your day <span className="hub-day-tz">(SAST)</span></h3>
+              <AddEventForm
+                people={people}
+                onCreated={(e) => setEvents((prev) => [...prev, e].sort((a, b) => a.starts_at.localeCompare(b.starts_at)))}
+              />
+            </div>
+            {events.length === 0 && <p className="hub-muted">Nothing scheduled for today.</p>}
+            <ul className="hub-day-list">
+              {events.map((e) => (
+                <EventRow
+                  key={e.id}
+                  event={e}
+                  isOwner={user?.id === e.created_by}
+                  onUpdated={(updated) =>
+                    setEvents((prev) => prev.map((ev) => (ev.id === updated.id ? updated : ev)))
+                  }
+                  onDeleted={(id) => setEvents((prev) => prev.filter((ev) => ev.id !== id))}
+                />
+              ))}
+            </ul>
+          </div>
         </div>
 
         {/* Right column: People online, Your channels, Recent conversations -
@@ -294,13 +323,16 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           <div className="hub-card hub-card--green" ref={peopleRef}>
             <div className="hub-card-head">
               <h3>People online</h3>
-              <span className="hub-count">{online.length}</span>
+              <div className="hub-card-head-actions">
+                <span className="hub-count">{online.length}</span>
+                <button className="hub-directory-btn" onClick={() => setDirectoryOpen(true)}>Directory</button>
+              </div>
             </div>
             <ul className="hub-people">
-              {(peopleExpanded ? people : people.slice(0, CAP)).map((p) => (
+              {(peopleExpanded ? online : online.slice(0, CAP)).map((p) => (
                 <li key={p.id}>
                   <button className="hub-person hub-person-btn" onClick={() => onMessagePerson(p)}>
-                    <span className={`hub-dot ${p.status === 'online' ? 'is-on' : ''}`} />
+                    <span className="hub-dot is-on" />
                     <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
                       {(p.full_name || '?').charAt(0).toUpperCase()}
                     </span>
@@ -311,10 +343,11 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
                   </button>
                 </li>
               ))}
+              {online.length === 0 && <li className="hub-muted">No one online right now.</li>}
             </ul>
-            {people.length > CAP && (
+            {online.length > CAP && (
               <button className="hub-show-more" onClick={() => setPeopleExpanded((v) => !v)}>
-                {peopleExpanded ? 'Show less' : `Show ${people.length - CAP} more`}
+                {peopleExpanded ? 'Show less' : `Show ${online.length - CAP} more`}
               </button>
             )}
           </div>
@@ -375,24 +408,18 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           )}
         </div>
       </div>
-
-      <div className="hub-card hub-day-card hub-card--blue">
-        <div className="hub-card-head">
-          <h3>📅 Your day <span className="hub-day-tz">(SAST)</span></h3>
-          <AddEventForm onCreated={(e) => setEvents((prev) => [...prev, e].sort((a, b) => a.starts_at.localeCompare(b.starts_at)))} />
-        </div>
-        {events.length === 0 && <p className="hub-muted">Nothing scheduled for today.</p>}
-        <ul className="hub-day-list">
-          {events.map((e) => (
-            <li key={e.id} className="hub-day-item">
-              <span className="hub-day-time">{formatSAST(e.starts_at)}</span>
-              <span className="hub-day-title">{e.title}</span>
-              {e.author_name && <span className="hub-day-author">{e.author_name}</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
         </>
+      )}
+
+      {directoryOpen && (
+        <PeopleDirectoryModal
+          people={people}
+          onClose={() => setDirectoryOpen(false)}
+          onMessage={(p) => {
+            setDirectoryOpen(false);
+            onMessagePerson(p);
+          }}
+        />
       )}
 
       {openAnn && (
@@ -406,28 +433,124 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   );
 }
 
-// Small inline form to add a "today" event. The time input is treated as
-// SAST explicitly (not the browser's local timezone) - since SAST has a
-// fixed +2 offset with no daylight saving, appending "+02:00" to whatever
-// time the user types converts it to the correct UTC instant every time.
-function AddEventForm({ onCreated }: { onCreated: (e: Event) => void }) {
+// One row in "Your Day": shows the event, and if the current user created
+// it, hover-reveals edit/delete controls. Editing turns the row into a
+// small inline form reusing the same fields as creation. attendee_names is
+// defensively defaulted to [] - a past bug (now fixed server-side) briefly
+// returned events without it, which crashed the page; this guard means a
+// similar shape mismatch degrades gracefully instead of crashing again.
+function EventRow({
+  event,
+  isOwner,
+  onUpdated,
+  onDeleted,
+}: {
+  event: Event;
+  isOwner: boolean;
+  onUpdated: (e: Event) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(event.title);
+  const [time, setTime] = useState(formatSAST(event.starts_at));
+  const [venue, setVenue] = useState(event.venue || '');
+  const [busy, setBusy] = useState(false);
+  const attendees = event.attendee_names || [];
+
+  async function save() {
+    setBusy(true);
+    try {
+      const dateStr = event.starts_at.slice(0, 10);
+      const startsAt = `${dateStr}T${time}:00+02:00`;
+      const { event: updated } = await eventsApi.update(event.id, { title: title.trim(), startsAt, venue: venue.trim() });
+      onUpdated(updated);
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete "${event.title}"?`)) return;
+    await eventsApi.remove(event.id);
+    onDeleted(event.id);
+  }
+
+  if (editing) {
+    return (
+      <li className="hub-day-item hub-day-item-editing">
+        <div className="hub-event-form">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title" />
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          <input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue" className="hub-event-venue" />
+          <button className="hub-post-cancel" onClick={() => setEditing(false)}>Cancel</button>
+          <button className="hub-post-send" onClick={save} disabled={busy}>{busy ? 'Saving...' : 'Save'}</button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="hub-day-item">
+      <span className="hub-day-time">{formatSAST(event.starts_at)}</span>
+      <div className="hub-day-body">
+        <span className="hub-day-title">{event.title}</span>
+        <span className="hub-day-meta">
+          {event.venue && <span className="hub-day-venue">📍 {event.venue}</span>}
+          {attendees.length > 0 && (
+            <span className="hub-day-attendees">
+              👥 {attendees.slice(0, 3).join(', ')}
+              {attendees.length > 3 ? ` +${attendees.length - 3}` : ''}
+            </span>
+          )}
+        </span>
+      </div>
+      {isOwner && (
+        <div className="hub-day-actions">
+          <button className="hub-day-action" onClick={() => setEditing(true)} title="Edit">✏️</button>
+          <button className="hub-day-action" onClick={remove} title="Delete">🗑️</button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+// Small form to add a "today" event: title, time, optional venue, and
+// optional attendees. The time input is treated as SAST explicitly (not the
+// browser's local timezone) - since SAST has a fixed +2 offset with no
+// daylight saving, appending "+02:00" to whatever time the user types
+// converts it to the correct UTC instant every time. Invited attendees get
+// a real notification (reuses the existing notifications system).
+function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: Event) => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('');
+  const [venue, setVenue] = useState('');
+  const [attendeeIds, setAttendeeIds] = useState<Set<string>>(new Set());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  function toggleAttendee(id: string) {
+    setAttendeeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function submit() {
     if (!title.trim() || !time) return;
     setBusy(true);
     try {
-      // "YYYY-MM-DD" for today, combined with the chosen HH:mm, explicitly
-      // in SAST (+02:00, fixed, no DST).
       const todayDate = new Date().toISOString().slice(0, 10);
       const startsAt = `${todayDate}T${time}:00+02:00`;
-      const { event } = await eventsApi.create(title.trim(), startsAt);
+      const { event } = await eventsApi.create(title.trim(), startsAt, venue.trim() || undefined, Array.from(attendeeIds));
       onCreated(event);
       setTitle('');
       setTime('');
+      setVenue('');
+      setAttendeeIds(new Set());
       setOpen(false);
     } finally {
       setBusy(false);
@@ -443,13 +566,30 @@ function AddEventForm({ onCreated }: { onCreated: (e: Event) => void }) {
   }
 
   return (
-    <div className="hub-event-form">
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title" />
-      <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-      <button className="hub-post-cancel" onClick={() => setOpen(false)}>Cancel</button>
-      <button className="hub-post-send" onClick={submit} disabled={busy}>
-        {busy ? 'Adding...' : 'Add'}
-      </button>
+    <div className="hub-event-form-wrap">
+      <div className="hub-event-form">
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title" />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        <input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue (optional)" className="hub-event-venue" />
+        <button className="hub-event-attendee-btn" onClick={() => setPickerOpen((v) => !v)}>
+          👥 {attendeeIds.size > 0 ? `${attendeeIds.size} invited` : 'Invite'}
+        </button>
+        <button className="hub-post-cancel" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="hub-post-send" onClick={submit} disabled={busy}>
+          {busy ? 'Adding...' : 'Add'}
+        </button>
+      </div>
+      {pickerOpen && (
+        <div className="hub-attendee-picker">
+          {people.map((p) => (
+            <label key={p.id} className="hub-attendee-row">
+              <input type="checkbox" checked={attendeeIds.has(p.id)} onChange={() => toggleAttendee(p.id)} />
+              {p.full_name || p.email}
+            </label>
+          ))}
+          {people.length === 0 && <p className="hub-muted">No one to invite yet.</p>}
+        </div>
+      )}
     </div>
   );
 }

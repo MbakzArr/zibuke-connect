@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { channelsApi, type Channel, type Dm } from '../api/resources';
 import { useNotifications } from '../context/NotificationsContext';
 import { useSocket } from '../context/SocketContext';
+import MiniCalendar from './MiniCalendar';
 
 interface SidebarProps {
   activeView: string; // 'hub' or a channel id
@@ -29,6 +30,9 @@ export default function Sidebar({
   const [dms, setDms] = useState<Dm[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  // Collapsed by default - it doesn't need to sit visible in the sidebar
+  // all the time, just a click away.
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const { unreadDmChannelIds } = useNotifications();
   const socket = useSocket();
   // Channels flagged unread LIVE by the socket, on top of what the last
@@ -165,6 +169,14 @@ export default function Sidebar({
             <li className="side-empty">No direct messages yet. Press + to start one.</li>
           )}
         </ul>
+      </div>
+
+      <div className="side-section">
+        <button className="side-section-head side-section-toggle" onClick={() => setCalendarOpen((v) => !v)}>
+          <span>📅 Calendar</span>
+          <span className="side-toggle-chevron">{calendarOpen ? '▾' : '▸'}</span>
+        </button>
+        {calendarOpen && <MiniCalendar />}
       </div>
     </nav>
   );

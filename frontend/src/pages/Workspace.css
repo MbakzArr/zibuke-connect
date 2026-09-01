@@ -64,6 +64,11 @@
   font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--ink-faint);
 }
+.side-section-toggle {
+  width: 100%; border: none; background: transparent; cursor: pointer;
+}
+.side-section-toggle:hover { color: var(--ink); }
+.side-toggle-chevron { font-size: 10px; }
 .side-add {
   border: none; background: transparent; color: var(--ink-faint);
   font-size: 18px; line-height: 1; width: 20px; height: 20px; border-radius: 4px;
@@ -421,8 +426,12 @@
 /* Birthdays / celebrate card */
 .hub-celebrate { background: linear-gradient(180deg, #fffaf0, var(--surface)); border-color: #fde9c8; }
 .hub-celebrate-top { width: 100%; margin: 0 0 var(--sp-4); }
-.hub-bday-row { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
-.hub-bday { display: flex; align-items: center; gap: var(--sp-2); }
+.hub-bday-row { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.hub-bday {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3); border: 1px solid #fde9c8; border-radius: var(--radius);
+  background: rgba(255,255,255,0.6); flex: 1 1 240px; min-width: 240px;
+}
 .hub-bday-name { font-size: 14px; font-weight: 600; }
 .hub-bday-note { font-size: 12px; color: var(--away); }
 
@@ -841,3 +850,130 @@
 .hub-card--green .hub-card-head h3::before { content: '🟢 '; }
 .hub-card--violet .hub-card-head h3::before { content: '💬 '; }
 .hub-card--teal .hub-card-head h3::before { content: ''; }
+
+/* ---- Sidebar mini calendar ---- */
+.mini-cal { padding: 4px 2px; }
+.mini-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.mini-cal-title { font-size: 12px; font-weight: 600; color: var(--ink); }
+.mini-cal-nav {
+  border: none; background: transparent; color: var(--ink-faint); font-size: 16px;
+  width: 22px; height: 22px; border-radius: 6px; line-height: 1;
+}
+.mini-cal-nav:hover { background: var(--surface-2); color: var(--ink); }
+.mini-cal-weekdays {
+  display: grid; grid-template-columns: repeat(7, 1fr); text-align: center;
+  font-size: 10px; color: var(--ink-faint); margin-bottom: 2px;
+}
+.mini-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.mini-cal-cell {
+  position: relative; aspect-ratio: 1; border: none; background: transparent;
+  border-radius: 6px; font-size: 11px; color: var(--ink); display: flex;
+  align-items: center; justify-content: center;
+}
+.mini-cal-cell:not(.mini-cal-empty):hover { background: var(--surface-2); }
+.mini-cal-cell.is-today { background: var(--indigo-600); color: #fff; font-weight: 700; }
+.mini-cal-cell.is-selected:not(.is-today) { background: var(--indigo-50); color: var(--indigo-700); font-weight: 600; }
+.mini-cal-dot {
+  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: #d97706;
+}
+.mini-cal-cell.is-today .mini-cal-dot { background: #fff; }
+.mini-cal-day-events {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.mini-cal-event { display: flex; gap: 6px; font-size: 12px; }
+.mini-cal-event-time { font-weight: 700; color: var(--indigo-700); flex-shrink: 0; }
+.mini-cal-event-title { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Your Day: venue + attendees on each item ---- */
+.hub-day-item { align-items: flex-start; }
+.hub-day-body { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.hub-day-meta { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+.hub-day-venue, .hub-day-attendees { font-size: 11px; color: var(--ink-faint); }
+
+/* ---- Event form: venue + attendee picker ---- */
+.hub-event-form-wrap { position: relative; }
+.hub-event-venue {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; width: 140px;
+}
+.hub-event-attendee-btn {
+  padding: 5px 10px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: var(--radius-sm); font-size: 12px; color: var(--ink); white-space: nowrap;
+}
+.hub-event-attendee-btn:hover { background: var(--surface-2); }
+.hub-attendee-picker {
+  position: absolute; top: 100%; right: 0; margin-top: 4px; z-index: 20;
+  width: 220px; max-height: 220px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 12px 30px rgba(26,26,46,0.15); padding: var(--sp-2);
+}
+.hub-attendee-row {
+  display: flex; align-items: center; gap: var(--sp-2); padding: 6px 8px;
+  font-size: 13px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.hub-attendee-row:hover { background: var(--surface-2); }
+
+@media (max-width: 720px) {
+  .hub-event-venue { width: 100px; }
+}
+
+/* ---- Global error boundary fallback ---- */
+.error-boundary { min-height: 100vh; display: grid; place-items: center; background: var(--surface-2); padding: var(--sp-5); }
+.error-boundary-card {
+  max-width: 380px; text-align: center; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: var(--sp-6);
+}
+.error-boundary-card h2 { margin: 0 0 var(--sp-2); font-size: 18px; }
+.error-boundary-card p { color: var(--ink-faint); font-size: 14px; margin-bottom: var(--sp-4); }
+.error-boundary-card button {
+  padding: 10px 22px; border: none; border-radius: var(--radius-sm);
+  background: var(--indigo-600); color: #fff; font-weight: 600;
+}
+
+/* ---- Your Day: edit/delete on hover, editing state ---- */
+.hub-day-item { position: relative; }
+.hub-day-actions {
+  display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s;
+  position: absolute; right: 0; top: 8px;
+}
+.hub-day-item:hover .hub-day-actions { opacity: 1; }
+.hub-day-action {
+  border: none; background: transparent; padding: 4px 6px; border-radius: 6px; font-size: 13px;
+}
+.hub-day-action:hover { background: var(--surface-2); }
+.hub-day-item-editing { padding: 6px 0; }
+
+/* ---- People online header actions + Directory button ---- */
+.hub-card-head-actions { display: flex; align-items: center; gap: var(--sp-2); }
+.hub-directory-btn {
+  padding: 3px 10px; border: 1px solid var(--border); background: var(--surface);
+  border-radius: 14px; font-size: 11px; font-weight: 600; color: var(--ink-soft);
+}
+.hub-directory-btn:hover { background: var(--surface-2); }
+
+/* ---- Directory modal ---- */
+.directory-list { list-style: none; margin: 0; padding: var(--sp-2); max-height: 60vh; overflow-y: auto; }
+.directory-row { display: flex; align-items: center; gap: var(--sp-3); padding: 10px 8px; border-radius: var(--radius-sm); }
+.directory-row:hover { background: var(--surface-2); }
+.directory-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.directory-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.directory-role { font-size: 12px; color: var(--ink-faint); }
+.directory-msg {
+  padding: 5px 14px; border: 1px solid var(--indigo-600); background: var(--surface);
+  color: var(--indigo-600); border-radius: 14px; font-size: 12px; font-weight: 600; flex-shrink: 0;
+}
+.directory-msg:hover { background: var(--indigo-50); }
+
+/* ---- Mini calendar: inline add-event form on a selected day ---- */
+.mini-cal-add-btn {
+  margin-top: 4px; padding: 6px 0; border: none; background: transparent;
+  color: var(--indigo-600); font-size: 12px; font-weight: 600; text-align: left;
+}
+.mini-cal-add-btn:hover { text-decoration: underline; }
+.mini-cal-add-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.mini-cal-add-form input {
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px;
+}
+.mini-cal-add-actions { display: flex; justify-content: flex-end; gap: 6px; }

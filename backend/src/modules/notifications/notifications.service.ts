@@ -6,7 +6,7 @@ import { emitToUser } from '../messaging/realtime';
 // they don't touch sockets themselves. If the user is connected, they get
 // it instantly; if not, it's waiting in their list when they next load.
 
-type NotificationType = 'mention' | 'announcement' | 'dm';
+type NotificationType = 'mention' | 'announcement' | 'dm' | 'event';
 
 interface CreateNotificationInput {
   userId: string;
@@ -58,6 +58,14 @@ async function hydrateOne(n: any) {
     );
     return { ...n, ...r.rows[0] };
   }
+  if (n.type === 'event') {
+    const r = await pool.query(
+      `SELECT title AS event_title, starts_at AS event_starts_at, venue AS event_venue
+       FROM events WHERE id = $1`,
+      [n.source_id]
+    );
+    return { ...n, ...r.rows[0] };
+  }
   return n;
 }
 
@@ -103,7 +111,10 @@ export async function listNotifications(userId: string, unreadOnly = false) {
             msg.content        AS message_content,
             msg.channel_id     AS message_channel_id,
             sender.full_name   AS sender_name,
-            ann.title          AS announcement_title
+            ann.title          AS announcement_title,
+            ev.title           AS event_title,
+            ev.starts_at       AS event_starts_at,
+            ev.venue           AS event_venue
      FROM notifications n
      LEFT JOIN messages msg
        ON msg.id = n.source_id AND n.type IN ('mention', 'dm')
@@ -111,6 +122,8 @@ export async function listNotifications(userId: string, unreadOnly = false) {
        ON sender.user_id = msg.user_id
      LEFT JOIN announcements ann
        ON ann.id = n.source_id AND n.type = 'announcement'
+     LEFT JOIN events ev
+       ON ev.id = n.source_id AND n.type = 'event'
      WHERE n.user_id = $1
        ${unreadOnly ? 'AND n.is_read = false' : ''}
      ORDER BY n.created_at DESC

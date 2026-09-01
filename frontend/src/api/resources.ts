@@ -248,17 +248,25 @@ export interface Event {
   id: string;
   title: string;
   starts_at: string;
+  venue: string | null;
   created_by: string;
   author_name: string | null;
+  attendee_names: string[];
 }
 
 export const eventsApi = {
   today: () => apiRequest<{ events: Event[] }>('/api/v1/events/today'),
-  create: (title: string, startsAt: string) =>
+  forDate: (date: string) => apiRequest<{ events: Event[] }>(`/api/v1/events?date=${date}`),
+  monthDates: (year: number, month: number) =>
+    apiRequest<{ dates: string[] }>(`/api/v1/events/month?year=${year}&month=${month}`),
+  create: (title: string, startsAt: string, venue?: string, attendeeIds?: string[]) =>
     apiRequest<{ event: Event }>('/api/v1/events', {
       method: 'POST',
-      body: { title, startsAt },
+      body: { title, startsAt, venue, attendeeIds },
     }),
+  update: (id: string, fields: { title?: string; startsAt?: string; venue?: string }) =>
+    apiRequest<{ event: Event }>(`/api/v1/events/${id}`, { method: 'PATCH', body: fields }),
+  remove: (id: string) => apiRequest(`/api/v1/events/${id}`, { method: 'DELETE' }),
 };
 
 export const usersApi = {

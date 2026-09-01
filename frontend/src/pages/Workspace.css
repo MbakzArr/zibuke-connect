@@ -152,9 +152,9 @@
 .chan-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---- Company Hub ---- */
-.hub { overflow-y: auto; padding: var(--sp-6); }
-.hub-hero, .hub-grid { max-width: 1040px; margin-left: auto; margin-right: auto; }
-.hub-hero { margin-bottom: var(--sp-6); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
+.hub { overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-6); }
+.hub-hero, .hub-grid { width: 100%; }
+.hub-hero { margin-bottom: var(--sp-4); display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
 .hub-date { margin: var(--sp-2) 0 0; font-size: 13px; color: var(--ink-faint); }
 .hub-status-pill {
   display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
@@ -164,25 +164,33 @@
 .hub-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); }
 
 /* Stats row */
-.hub-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); max-width: 1040px; margin: 0 auto var(--sp-5); }
+.hub-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); width: 100%; margin: 0 0 var(--sp-4); }
 .hub-stat-card {
-  display: flex; align-items: center; gap: var(--sp-3);
+  display: flex; align-items: center; gap: var(--sp-3); text-align: left; width: 100%;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: var(--sp-4);
+  padding: var(--sp-4); cursor: pointer; transition: border-color 0.12s, transform 0.12s;
 }
+.hub-stat-card:hover { border-color: var(--indigo-600); transform: translateY(-1px); }
 .hub-stat-icon { font-size: 22px; }
 .hub-stat-card strong { display: block; font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.1; }
 .hub-stat-card span { font-size: 12px; color: var(--ink-faint); }
 
+/* Show more/less toggle under a capped list */
+.hub-show-more {
+  margin-top: var(--sp-2); padding: 6px 0; border: none; background: transparent;
+  color: var(--indigo-600); font-size: 13px; font-weight: 600;
+}
+.hub-show-more:hover { text-decoration: underline; }
+
 /* Error banner for a partially-failed load */
 .hub-error {
-  max-width: 1040px; margin: 0 auto var(--sp-5);
+  width: 100%; margin: 0 0 var(--sp-5);
   padding: 10px 16px; background: #fffaf0; border: 1px solid #fde9c8;
   border-radius: var(--radius-sm); font-size: 13px; color: var(--away);
 }
 
 /* Loading skeleton */
-.hub-skeleton { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--sp-3); }
+.hub-skeleton { width: 100%; display: flex; flex-direction: column; gap: var(--sp-3); }
 .hub-skeleton-row {
   height: 90px; border-radius: var(--radius); background: var(--surface-2);
   background-image: linear-gradient(90deg, var(--surface-2) 0px, var(--surface-3) 40px, var(--surface-2) 80px);
@@ -203,15 +211,15 @@
 .hub-greeting { margin: 0; font-size: 30px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
 .hub-tagline { margin: var(--sp-2) 0 0; color: var(--ink-faint); font-size: 15px; }
 
-.hub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); align-items: start; }
+.hub-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: var(--sp-4); align-items: start; }
 .hub-col-narrow { min-width: 0; }
 .hub-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: var(--sp-5);
+  border-radius: var(--radius); padding: var(--sp-4);
 }
 .hub-card-head {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-3);
 }
 .hub-card-head h3 { margin: 0; font-size: 15px; }
 .hub-count {
@@ -399,11 +407,11 @@
 .bell-item-time { font-size: 12px; color: var(--ink-faint); flex-shrink: 0; }
 
 /* ---- Hub: stacked cards in a column ---- */
-.hub-col { display: flex; flex-direction: column; gap: var(--sp-5); }
+.hub-col { display: flex; flex-direction: column; gap: var(--sp-4); }
 
 /* Full-width card below the 2x2 grid (Your Channels doesn't naturally pair
    with anything else, so it gets its own row). */
-.hub-full-row { max-width: 1040px; margin: var(--sp-5) auto 0; }
+.hub-full-row { width: 100%; margin: var(--sp-5) 0 0; }
 .hub-chan-list-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .hub-chan-list-row .hub-chan {
   width: auto; padding: 8px 14px; border: 1px solid var(--border); border-radius: 18px;
@@ -412,6 +420,7 @@
 
 /* Birthdays / celebrate card */
 .hub-celebrate { background: linear-gradient(180deg, #fffaf0, var(--surface)); border-color: #fde9c8; }
+.hub-celebrate-top { width: 100%; margin: 0 0 var(--sp-4); }
 .hub-bday-row { display: flex; flex-wrap: wrap; gap: var(--sp-4); }
 .hub-bday { display: flex; align-items: center; gap: var(--sp-2); }
 .hub-bday-name { font-size: 14px; font-weight: 600; }
@@ -708,9 +717,29 @@
 .ws-account-menu-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-faint); }
 .ws-account-menu-status.is-online { color: var(--online); }
 .ws-account-menu-status.is-online::before { background: var(--online); }
+
+/* Manual availability status picker (Available / Busy / Away) */
+.ws-account-menu-section-label {
+  padding: 10px 16px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-faint); border-top: 1px solid var(--border);
+}
+.ws-status-options { padding: 2px 8px 8px; display: flex; flex-direction: column; gap: 1px; }
+.ws-status-option {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; text-align: left;
+  padding: 7px 8px; border: none; background: transparent; border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--ink);
+}
+.ws-status-option:hover { background: var(--surface-2); }
+.ws-status-option.is-selected { background: var(--indigo-50); color: var(--indigo-700); font-weight: 600; }
+.ws-status-dot-small { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ws-status-available { background: var(--online); }
+.ws-status-busy { background: var(--danger); }
+.ws-status-away { background: var(--away); }
+
 .ws-account-menu-item {
   display: block; width: 100%; text-align: left; padding: 11px 16px;
   border: none; background: transparent; font-size: 14px; color: var(--ink);
+  border-top: 1px solid var(--border);
 }
 .ws-account-menu-item:hover { background: var(--surface-2); }
 .ws-account-menu-danger { color: var(--danger); }
@@ -763,7 +792,7 @@
 }
 
 /* ---- Your Day (calendar) card ---- */
-.hub-day-card { max-width: 1040px; margin: var(--sp-5) auto 0; }
+.hub-day-card { width: 100%; margin: var(--sp-4) 0 0; }
 .hub-day-tz { font-size: 11px; font-weight: 500; color: var(--ink-faint); }
 .hub-day-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .hub-day-item {
@@ -784,3 +813,31 @@
 .hub-event-form input[type="time"] {
   padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px;
 }
+
+/* ---- Colored hero card ---- */
+.hub-hero-card {
+  background: linear-gradient(135deg, var(--indigo-600), var(--indigo-700));
+  border-radius: var(--radius); padding: var(--sp-5) var(--sp-6);
+  color: #fff; margin-left: 0; margin-right: 0;
+}
+.hub-hero-card .hub-eyebrow { color: rgba(255,255,255,0.75); }
+.hub-hero-card .hub-greeting { color: #fff; }
+.hub-hero-card .hub-tagline { color: rgba(255,255,255,0.85); }
+.hub-hero-card .hub-date { color: rgba(255,255,255,0.7); }
+.hub-hero-card .hub-status-pill { background: rgba(255,255,255,0.16); color: #fff; }
+.hub-hero-card .hub-status-dot { background: #4ade80; }
+
+/* ---- Per-card colour accents: a coloured left border + a subtle tinted
+   card-head background, so each section is visually distinct without being
+   loud. One consistent recipe applied per card type. ---- */
+.hub-card--indigo { border-left: 3px solid var(--indigo-600); }
+.hub-card--green { border-left: 3px solid var(--online); }
+.hub-card--amber { border-left: 3px solid #d97706; }
+.hub-card--teal { border-left: 3px solid #0d9488; }
+.hub-card--violet { border-left: 3px solid #7c3aed; }
+.hub-card--blue { border-left: 3px solid #0891b2; }
+
+.hub-card--indigo .hub-card-head h3::before { content: '📢 '; }
+.hub-card--green .hub-card-head h3::before { content: '🟢 '; }
+.hub-card--violet .hub-card-head h3::before { content: '💬 '; }
+.hub-card--teal .hub-card-head h3::before { content: ''; }

@@ -22,7 +22,23 @@ export function getAccessToken() {
 
 // Try to get a new access token using the refresh token. Returns true if it
 // worked. Called automatically when a request comes back 401.
-async function tryRefresh(): Promise<boolean> {
+//
+// SINGLE-FLIGHT: if the hub (or anything else) fires several requests at
+// once and the token happens to be expired, EVERY one of them hits 401 at
+// roughly the same moment. Without this, each would independently call
+// /auth/refresh, racing each other. inFlightRefresh makes every caller
+// share the same one refresh attempt instead.
+let inFlightRefresh: Promise<boolean> | null = null;
+
+function tryRefresh(): Promise<boolean> {
+  if (inFlightRefresh) return inFlightRefresh;
+  inFlightRefresh = doRefresh().finally(() => {
+    inFlightRefresh = null;
+  });
+  return inFlightRefresh;
+}
+
+async function doRefresh(): Promise<boolean> {
   if (!refreshToken) return false;
   try {
     const res = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
@@ -73,7 +89,12 @@ export async function apiRequest<T = any>(
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
-    throw new Error(errBody.error || `Request failed (${res.status})`);
+    const message = errBody.error || `Request failed (${res.status})`;
+    // Traceable diagnostic: when a hub load or any batched call fails, this
+    // pinpoints exactly which endpoint and status caused it, instead of a
+    // generic "something failed" with no way to tell which one.
+    console.error(`API error [${method} ${path}] ${res.status}: ${message}`);
+    throw new Error(message);
   }
 
   // 204 No Content has no body.

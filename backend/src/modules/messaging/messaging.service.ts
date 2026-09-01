@@ -180,3 +180,35 @@ export async function searchMessages(
   );
   return result.rows;
 }
+
+// The most recently active conversations (channels + DMs) the user belongs
+// to, each resolved to its latest message. Powers the hub's "Recent chats"
+// card. For a DM, resolves to the OTHER person's name rather than the
+// internal channel name. Real data only - no mocking.
+export async function getRecentConversations(userId: string, limit = 6) {
+  const result = await pool.query(
+    `WITH latest AS (
+       SELECT DISTINCT ON (m.channel_id)
+              m.channel_id, m.content, m.created_at, m.user_id AS sender_id
+       FROM messages m
+       JOIN channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $1
+       WHERE m.deleted_at IS NULL
+       ORDER BY m.channel_id, m.created_at DESC
+     )
+     SELECT l.channel_id, l.content, l.created_at,
+            c.name AS channel_name, c.is_dm,
+            sender.full_name AS sender_name,
+            otherp.full_name AS other_name
+     FROM latest l
+     JOIN channels c ON c.id = l.channel_id
+     LEFT JOIN employee_profiles sender ON sender.user_id = l.sender_id
+     LEFT JOIN channel_members otherm
+       ON otherm.channel_id = l.channel_id AND otherm.user_id <> $1 AND c.is_dm = true
+     LEFT JOIN users otheru ON otheru.id = otherm.user_id
+     LEFT JOIN employee_profiles otherp ON otherp.user_id = otheru.id
+     ORDER BY l.created_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  return result.rows;
+}

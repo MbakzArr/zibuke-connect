@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getMessages, editMessage, deleteMessage, searchMessages } from './messaging.service';
+import { getMessages, editMessage, deleteMessage, searchMessages, getRecentConversations } from './messaging.service';
 import { getChannel, isMember } from '../channels/channels.service';
 import { emitToChannel } from './realtime';
 
@@ -96,5 +96,15 @@ export async function search(req: Request, res: Response) {
   } catch (err) {
     console.error('Message search error:', err);
     return res.status(500).json({ error: 'Could not search messages' });
+  }
+}
+
+export async function recent(req: Request, res: Response) {
+  try {
+    const conversations = await getRecentConversations(req.user!.userId);
+    return res.json({ conversations });
+  } catch (err) {
+    console.error('Recent conversations error:', err);
+    return res.status(500).json({ error: 'Could not load recent conversations' });
   }
 }

@@ -12,7 +12,7 @@ import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ProfileModal from '../components/ProfileModal';
-import { channelsApi, announcementsApi, directoryApi, type Channel, type Person, type Announcement } from '../api/resources';
+import { channelsApi, announcementsApi, directoryApi, usersApi, type Channel, type Person, type Announcement } from '../api/resources';
 import './Workspace.css';
 
 // The authenticated app. Header + sidebar are always present; the main panel
@@ -35,6 +35,7 @@ export default function Workspace() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 720);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [availability, setAvailability] = useState<'available' | 'busy' | 'away'>('available');
   const [profileViewUserId, setProfileViewUserId] = useState<string | null>(null);
 
   // Drag-to-resize the sidebar. Mousedown on the handle starts a drag that
@@ -64,6 +65,9 @@ export default function Workspace() {
     if (!user) return;
     directoryApi.profile(user.id).then((d) => {
       setMyName(d.profile.full_name || user.email || 'You');
+      if (d.profile.availability === 'busy' || d.profile.availability === 'away') {
+        setAvailability(d.profile.availability);
+      }
     }).catch(() => setMyName(user.email || 'You'));
   }, [user]);
   const [showNewDm, setShowNewDm] = useState(false);
@@ -277,6 +281,28 @@ export default function Workspace() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="ws-account-menu-section-label">Status</div>
+                  <div className="ws-status-options">
+                    {(['available', 'busy', 'away'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        className={`ws-status-option ${availability === opt ? 'is-selected' : ''}`}
+                        onClick={async () => {
+                          setAvailability(opt);
+                          try {
+                            await usersApi.setAvailability(opt);
+                          } catch {
+                            // best-effort; keep the optimistic local choice
+                          }
+                        }}
+                      >
+                        <span className={`ws-status-dot-small ws-status-${opt}`} />
+                        {opt === 'available' ? 'Available' : opt === 'busy' ? 'Busy' : 'Away'}
+                      </button>
+                    ))}
+                  </div>
+
                   <button
                     className="ws-account-menu-item"
                     onClick={() => {
@@ -344,7 +370,13 @@ export default function Workspace() {
         )}
         <div className="ws-panel">
           {view === 'hub' ? (
-            <CompanyHub onOpenChannel={openChannel} onMessagePerson={openDmWithPerson} />
+            <CompanyHub
+              onOpenChannel={openChannel}
+              onMessagePerson={openDmWithPerson}
+              onOpenConversation={navigateToChannel}
+              onBrowseChannels={() => setShowBrowse(true)}
+              myName={myName}
+            />
           ) : activeChannel ? (
             <ChannelView
               channel={activeChannel}

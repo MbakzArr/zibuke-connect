@@ -10,6 +10,7 @@ const PUBLIC_PROFILE_COLUMNS = `
   u.id,
   u.email,
   u.status,
+  u.availability,
   u.department_id,
   d.name AS department_name,
   p.full_name,

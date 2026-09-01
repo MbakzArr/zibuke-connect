@@ -41,6 +41,7 @@ export interface Person {
   id: string;
   email: string;
   status: string;
+  availability?: string;
   full_name: string | null;
   job_title: string | null;
   department_name: string | null;
@@ -138,6 +139,7 @@ export interface FullProfile {
   id: string;
   email: string;
   status: string;
+  availability?: string;
   full_name: string | null;
   job_title: string | null;
   phone: string | null;
@@ -256,5 +258,13 @@ export const eventsApi = {
     apiRequest<{ event: Event }>('/api/v1/events', {
       method: 'POST',
       body: { title, startsAt },
+    }),
+};
+
+export const usersApi = {
+  setAvailability: (availability: 'available' | 'busy' | 'away') =>
+    apiRequest<{ availability: string }>('/api/v1/users/me/availability', {
+      method: 'PATCH',
+      body: { availability },
     }),
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   announcementsApi,
   directoryApi,
@@ -23,6 +23,7 @@ interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
   onMessagePerson: (person: Person) => void;
   onOpenConversation: (channelId: string) => void; // jump to a recent chat
+  onBrowseChannels?: () => void; // opens the browse-channels modal
   myName?: string; // for the personalized greeting
 }
 
@@ -64,8 +65,15 @@ function formatSAST(iso: string): string {
 // today's birthdays, recent conversations, and quick access to your
 // channels. Everything here is backed by real data from the API - nothing
 // is mocked (no fake calendar/meeting data).
-export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConversation, myName }: CompanyHubProps) {
+export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConversation, onBrowseChannels, myName }: CompanyHubProps) {
   const { user } = useAuth();
+  const announcementsRef = useRef<HTMLDivElement>(null);
+  const peopleRef = useRef<HTMLDivElement>(null);
+  const [announcementsExpanded, setAnnouncementsExpanded] = useState(false);
+  const [peopleExpanded, setPeopleExpanded] = useState(false);
+  const [channelsExpanded, setChannelsExpanded] = useState(false);
+  const [recentExpanded, setRecentExpanded] = useState(false);
+  const CAP = 5; // lists longer than this get a "Show more" toggle
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [birthdays, setBirthdays] = useState<Birthday[]>([]);
@@ -76,35 +84,53 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   const [bdayReactions, setBdayReactions] = useState<ReactionsMap>({});
   const [openAnn, setOpenAnn] = useState<Announcement | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.allSettled([
-      announcementsApi.list().then((d) => {
-        setAnnouncements(d.announcements);
-        const ids = d.announcements.map((a) => a.id);
-        if (ids.length > 0) {
-          reactionsApi.list('announcement', ids).then((r) => setAnnReactions(r.reactions));
-        }
-      }),
-      directoryApi.list().then((d) => setPeople(d.people)),
-      directoryApi.birthdays().then((d) => {
-        setBirthdays(d.birthdays);
-        const ids = d.birthdays.map((b) => b.id);
-        if (ids.length > 0) {
-          reactionsApi.list('birthday', ids).then((r) => setBdayReactions(r.reactions));
-        }
-      }),
-      channelsApi.list().then((d) => setChannels(d.channels)),
-      messagesApi.recent().then((d) => setRecent(d.conversations)),
-      eventsApi.today().then((d) => setEvents(d.events)),
-    ]).then((results) => {
+    // Each entry is labelled so a failure names EXACTLY which section
+    // couldn't load, instead of a vague "something failed" banner.
+    const sections: Array<{ label: string; run: () => Promise<void> }> = [
+      {
+        label: 'Announcements',
+        run: async () => {
+          const d = await announcementsApi.list();
+          setAnnouncements(d.announcements);
+          const ids = d.announcements.map((a) => a.id);
+          if (ids.length > 0) {
+            reactionsApi.list('announcement', ids).then((r) => setAnnReactions(r.reactions));
+          }
+        },
+      },
+      { label: 'People', run: async () => setPeople((await directoryApi.list()).people) },
+      {
+        label: 'Birthdays',
+        run: async () => {
+          const d = await directoryApi.birthdays();
+          setBirthdays(d.birthdays);
+          const ids = d.birthdays.map((b) => b.id);
+          if (ids.length > 0) {
+            reactionsApi.list('birthday', ids).then((r) => setBdayReactions(r.reactions));
+          }
+        },
+      },
+      { label: 'Channels', run: async () => setChannels((await channelsApi.list()).channels) },
+      { label: 'Recent conversations', run: async () => setRecent((await messagesApi.recent()).conversations) },
+      { label: "Your day", run: async () => setEvents((await eventsApi.today()).events) },
+    ];
+
+    Promise.allSettled(sections.map((s) => s.run())).then((results) => {
       if (cancelled) return;
-      // If any one section failed to load, show a small non-blocking notice
-      // rather than a broken page - the sections that DID load still work.
-      if (results.some((r) => r.status === 'rejected')) setLoadError(true);
+      const failed = results
+        .map((r, i) => (r.status === 'rejected' ? sections[i].label : null))
+        .filter((label): label is string => label !== null);
+      // Log the real reason for each failure - the API client also logs the
+      // status/endpoint, so between the two this is fully diagnosable.
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') console.error(`Hub section "${sections[i].label}" failed to load:`, r.reason);
+      });
+      setLoadError(failed);
       setLoading(false);
     });
 
@@ -121,7 +147,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
 
   return (
     <section className="hub">
-      <div className="hub-hero">
+      <div className="hub-hero hub-hero-card">
         <div>
           <p className="hub-eyebrow">Company Hub</p>
           <h1 className="hub-greeting">
@@ -136,9 +162,10 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
         </div>
       </div>
 
-      {loadError && (
+      {loadError.length > 0 && (
         <div className="hub-error" role="alert">
-          Some Company Hub information couldn't be loaded, but everything else below is up to date.
+          Couldn't load: {loadError.join(', ')}. Everything else below is current
+          {' '}(check the browser console for the exact cause).
         </div>
       )}
 
@@ -151,163 +178,205 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
       ) : (
         <>
           <div className="hub-stat-grid">
-            <div className="hub-stat-card">
+            <button
+              className="hub-stat-card"
+              onClick={() => (onBrowseChannels ? onBrowseChannels() : onOpenChannel(channels[0]))}
+              title="Browse channels"
+            >
               <span className="hub-stat-icon">💬</span>
               <div><strong>{channels.length}</strong><span>Channels</span></div>
-            </div>
-            <div className="hub-stat-card">
+            </button>
+            <button
+              className="hub-stat-card"
+              onClick={() => peopleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              title="Jump to people"
+            >
               <span className="hub-stat-icon">👥</span>
               <div><strong>{people.length}</strong><span>Employees</span></div>
-            </div>
-            <div className="hub-stat-card">
+            </button>
+            <button
+              className="hub-stat-card"
+              onClick={() => peopleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              title="Jump to who's online"
+            >
               <span className="hub-stat-icon">🟢</span>
               <div><strong>{online.length}</strong><span>Online now</span></div>
-            </div>
-            <div className="hub-stat-card">
+            </button>
+            <button
+              className="hub-stat-card"
+              onClick={() => announcementsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              title="Jump to announcements"
+            >
               <span className="hub-stat-icon">📢</span>
               <div><strong>{announcements.length}</strong><span>Announcements</span></div>
-            </div>
+            </button>
           </div>
 
-      <div className="hub-grid">
-        {/* Row 1: Announcements, People online */}
-        <div className="hub-card">
+      {/* Celebrate sits full-width, right below the stats and above
+          everything else - the most prominent spot on the page, since
+          celebrating people is one of the reasons this hub exists. */}
+      {birthdays.length > 0 && (
+        <div className="hub-card hub-celebrate hub-card--amber hub-celebrate-top">
           <div className="hub-card-head">
-            <h3>Announcements</h3>
-            {isAdmin && (
-              <NewAnnouncement onPosted={(a) => setAnnouncements((prev) => [a, ...prev])} />
-            )}
+            <h3>🎉 Celebrate today</h3>
           </div>
-          {announcements.length === 0 && <p className="hub-muted">No announcements yet.</p>}
-          {announcements.map((a) => (
-            <div key={a.id} className="hub-ann">
-              <button className="hub-ann-open" onClick={() => setOpenAnn(a)}>
-                <div className="hub-ann-title">{a.title}</div>
-                <div className="hub-ann-body">{a.content}</div>
-                <div className="hub-ann-meta">
-                  {a.author_name} · {new Date(a.created_at).toLocaleDateString()}
-                </div>
-              </button>
-              <Reactions targetType="announcement" targetId={a.id} initial={annReactions[a.id]} />
-            </div>
-          ))}
-        </div>
-
-        <div className="hub-card">
-          <div className="hub-card-head">
-            <h3>People online</h3>
-            <span className="hub-count">{online.length}</span>
-          </div>
-          <ul className="hub-people">
-            {people.map((p) => (
-              <li key={p.id}>
-                <button className="hub-person hub-person-btn" onClick={() => onMessagePerson(p)}>
-                  <span className={`hub-dot ${p.status === 'online' ? 'is-on' : ''}`} />
-                  <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
-                    {(p.full_name || '?').charAt(0).toUpperCase()}
-                  </span>
-                  <span className="hub-person-info">
-                    <span className="hub-person-name">{p.full_name || p.email}</span>
-                    {p.job_title && <span className="hub-person-role">{p.job_title}</span>}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Row 2: Celebrate, Recent conversations - only rendered when there's
-            something real to show, so the grid doesn't leave an empty gap. */}
-        {birthdays.length > 0 && (
-          <div className="hub-card hub-celebrate">
-            <div className="hub-card-head">
-              <h3>🎉 Celebrate today</h3>
-            </div>
-            <div className="hub-bday-row">
-              {birthdays.map((b) => (
-                <div key={b.id} className="hub-bday">
-                  <span className="hub-avatar" style={{ background: colorFor(b.id) }}>
-                    {(b.full_name || '?').charAt(0).toUpperCase()}
-                  </span>
-                  <div className="hub-bday-info">
-                    <div className="hub-bday-name">{b.full_name}</div>
-                    <div className="hub-bday-note">🎂 Birthday today</div>
-                    <div className="hub-bday-actions">
-                      <Reactions targetType="birthday" targetId={b.id} initial={bdayReactions[b.id]} />
-                      {b.id !== user?.id && (
-                        <button
-                          className="hub-bday-msg"
-                          onClick={() =>
-                            onMessagePerson({
-                              id: b.id,
-                              email: '',
-                              status: 'offline',
-                              full_name: b.full_name,
-                              job_title: b.job_title,
-                              department_name: b.department_name,
-                            })
-                          }
-                        >
-                          Message
-                        </button>
-                      )}
-                    </div>
+          <div className="hub-bday-row">
+            {birthdays.map((b) => (
+              <div key={b.id} className="hub-bday">
+                <span className="hub-avatar" style={{ background: colorFor(b.id) }}>
+                  {(b.full_name || '?').charAt(0).toUpperCase()}
+                </span>
+                <div className="hub-bday-info">
+                  <div className="hub-bday-name">{b.full_name}</div>
+                  <div className="hub-bday-note">🎂 Birthday today</div>
+                  <div className="hub-bday-actions">
+                    <Reactions targetType="birthday" targetId={b.id} initial={bdayReactions[b.id]} />
+                    {b.id !== user?.id && (
+                      <button
+                        className="hub-bday-msg"
+                        onClick={() =>
+                          onMessagePerson({
+                            id: b.id,
+                            email: '',
+                            status: 'offline',
+                            full_name: b.full_name,
+                            job_title: b.job_title,
+                            department_name: b.department_name,
+                          })
+                        }
+                      >
+                        Message
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        )}
-
-        {recent.length > 0 && (
-          <div className="hub-card">
-            <div className="hub-card-head">
-              <h3>Recent conversations</h3>
-            </div>
-            <ul className="hub-recent-list">
-              {recent.map((r) => {
-                const label = r.is_dm ? (r.other_name || 'Direct message') : `#${r.channel_name}`;
-                return (
-                  <li key={r.channel_id}>
-                    <button className="hub-recent" onClick={() => onOpenConversation(r.channel_id)}>
-                      <span className="hub-recent-top">
-                        <span className="hub-recent-label">{label}</span>
-                        <span className="hub-recent-time">{timeAgo(r.created_at)}</span>
-                      </span>
-                      <span className="hub-recent-preview">
-                        {r.is_dm ? '' : `${r.sender_name || 'Someone'}: `}
-                        {r.content}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {/* Your channels: full-width row of its own below the 2x2, since it
-          doesn't naturally pair with anything else. */}
-      <div className="hub-card hub-full-row">
-        <div className="hub-card-head">
-          <h3>Your channels</h3>
         </div>
-        <ul className="hub-chan-list hub-chan-list-row">
-          {channels.map((c) => (
-            <li key={c.id}>
-              <button className="hub-chan" onClick={() => onOpenChannel(c)}>
-                <span className="hub-chan-hash">{c.is_private ? '🔒' : '#'}</span>
-                <span className="hub-chan-name">{c.name}</span>
-                {c.member_count && <span className="hub-chan-count">{c.member_count}</span>}
+      )}
+
+      <div className="hub-grid">
+        {/* Left column: Announcements (capped, expandable) */}
+        <div className="hub-col">
+          <div className="hub-card hub-card--indigo" ref={announcementsRef}>
+            <div className="hub-card-head">
+              <h3>Announcements</h3>
+              {isAdmin && (
+                <NewAnnouncement onPosted={(a) => setAnnouncements((prev) => [a, ...prev])} />
+              )}
+            </div>
+            {announcements.length === 0 && <p className="hub-muted">No announcements yet.</p>}
+            {(announcementsExpanded ? announcements : announcements.slice(0, 3)).map((a) => (
+              <div key={a.id} className="hub-ann">
+                <button className="hub-ann-open" onClick={() => setOpenAnn(a)}>
+                  <div className="hub-ann-title">{a.title}</div>
+                  <div className="hub-ann-body">{a.content}</div>
+                  <div className="hub-ann-meta">
+                    {a.author_name} · {new Date(a.created_at).toLocaleDateString()}
+                  </div>
+                </button>
+                <Reactions targetType="announcement" targetId={a.id} initial={annReactions[a.id]} />
+              </div>
+            ))}
+            {announcements.length > 3 && (
+              <button className="hub-show-more" onClick={() => setAnnouncementsExpanded((v) => !v)}>
+                {announcementsExpanded ? 'Show less' : `Show ${announcements.length - 3} more`}
               </button>
-            </li>
-          ))}
-          {channels.length === 0 && <li className="hub-muted">No channels yet.</li>}
-        </ul>
+            )}
+          </div>
+        </div>
+
+        {/* Right column: People online, Your channels, Recent conversations -
+            stacked so channels fill the space that used to sit empty below
+            the people list. */}
+        <div className="hub-col hub-col-narrow">
+          <div className="hub-card hub-card--green" ref={peopleRef}>
+            <div className="hub-card-head">
+              <h3>People online</h3>
+              <span className="hub-count">{online.length}</span>
+            </div>
+            <ul className="hub-people">
+              {(peopleExpanded ? people : people.slice(0, CAP)).map((p) => (
+                <li key={p.id}>
+                  <button className="hub-person hub-person-btn" onClick={() => onMessagePerson(p)}>
+                    <span className={`hub-dot ${p.status === 'online' ? 'is-on' : ''}`} />
+                    <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
+                      {(p.full_name || '?').charAt(0).toUpperCase()}
+                    </span>
+                    <span className="hub-person-info">
+                      <span className="hub-person-name">{p.full_name || p.email}</span>
+                      {p.job_title && <span className="hub-person-role">{p.job_title}</span>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {people.length > CAP && (
+              <button className="hub-show-more" onClick={() => setPeopleExpanded((v) => !v)}>
+                {peopleExpanded ? 'Show less' : `Show ${people.length - CAP} more`}
+              </button>
+            )}
+          </div>
+
+          <div className="hub-card hub-card--violet">
+            <div className="hub-card-head">
+              <h3>Your channels</h3>
+            </div>
+            <ul className="hub-chan-list">
+              {(channelsExpanded ? channels : channels.slice(0, CAP)).map((c) => (
+                <li key={c.id}>
+                  <button className="hub-chan" onClick={() => onOpenChannel(c)}>
+                    <span className="hub-chan-hash">{c.is_private ? '🔒' : '#'}</span>
+                    <span className="hub-chan-name">{c.name}</span>
+                    {c.member_count && <span className="hub-chan-count">{c.member_count}</span>}
+                  </button>
+                </li>
+              ))}
+              {channels.length === 0 && <li className="hub-muted">No channels yet.</li>}
+            </ul>
+            {channels.length > CAP && (
+              <button className="hub-show-more" onClick={() => setChannelsExpanded((v) => !v)}>
+                {channelsExpanded ? 'Show less' : `Show ${channels.length - CAP} more`}
+              </button>
+            )}
+          </div>
+
+          {recent.length > 0 && (
+            <div className="hub-card hub-card--teal">
+              <div className="hub-card-head">
+                <h3>Recent conversations</h3>
+              </div>
+              <ul className="hub-recent-list">
+                {(recentExpanded ? recent : recent.slice(0, CAP)).map((r) => {
+                  const label = r.is_dm ? (r.other_name || 'Direct message') : `#${r.channel_name}`;
+                  return (
+                    <li key={r.channel_id}>
+                      <button className="hub-recent" onClick={() => onOpenConversation(r.channel_id)}>
+                        <span className="hub-recent-top">
+                          <span className="hub-recent-label">{label}</span>
+                          <span className="hub-recent-time">{timeAgo(r.created_at)}</span>
+                        </span>
+                        <span className="hub-recent-preview">
+                          {r.is_dm ? '' : `${r.sender_name || 'Someone'}: `}
+                          {r.content}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {recent.length > CAP && (
+                <button className="hub-show-more" onClick={() => setRecentExpanded((v) => !v)}>
+                  {recentExpanded ? 'Show less' : `Show ${recent.length - CAP} more`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="hub-card hub-day-card">
+      <div className="hub-card hub-day-card hub-card--blue">
         <div className="hub-card-head">
           <h3>📅 Your day <span className="hub-day-tz">(SAST)</span></h3>
           <AddEventForm onCreated={(e) => setEvents((prev) => [...prev, e].sort((a, b) => a.starts_at.localeCompare(b.starts_at)))} />

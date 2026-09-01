@@ -204,10 +204,44 @@
 
 /* ---- Responsive: stack on narrow screens (mobile / low-end) ---- */
 @media (max-width: 720px) {
-  .ws-sidebar-wrap { width: 180px !important; }
+  /* Sidebar becomes an overlay on phone widths: fixed over the content,
+     with a dimmed backdrop, instead of squeezing beside the panel (which is
+     what was happening before and made the layout look broken/stacked). */
+  .ws-sidebar-wrap {
+    position: fixed !important;
+    top: 56px; /* below the header */
+    left: 0;
+    bottom: 0;
+    width: min(85vw, 300px) !important;
+    z-index: 50;
+    box-shadow: 4px 0 20px rgba(26, 26, 46, 0.25);
+  }
+  .ws-resize-handle { display: none; } /* dragging doesn't make sense as an overlay */
   .hub-grid { grid-template-columns: 1fr; }
   .hub-col-narrow { order: -1; }
   .ws-user { display: none; }
+  .ws-search-placeholder { display: none; }
+  .ws-header { padding: 0 var(--sp-3); gap: 6px; }
+  .ws-name { font-size: 13px; white-space: nowrap; }
+  .ws-header-right { gap: 6px; }
+  .ws-search-field { width: auto; padding: 6px 10px; }
+  .ws-account-name { display: none; }
+  .hub { padding: var(--sp-4); }
+  .hub-greeting { font-size: 22px; }
+}
+
+/* Dimmed backdrop behind the mobile sidebar overlay, tapping it closes the
+   sidebar (handled in Workspace.tsx). Desktop never renders this. */
+.ws-sidebar-backdrop {
+  display: none;
+}
+@media (max-width: 720px) {
+  .ws-sidebar-backdrop {
+    display: block;
+    position: fixed; inset: 0; top: 56px;
+    background: rgba(26, 26, 46, 0.35);
+    z-index: 45;
+  }
 }
 
 /* ---- DM sidebar dots ---- */

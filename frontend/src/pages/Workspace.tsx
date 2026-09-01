@@ -27,7 +27,10 @@ export default function Workspace() {
   const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
   const [myName, setMyName] = useState<string>('');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // On phone-width screens, start with the sidebar hidden so the main
+  // content (Company Hub / channel) is what people see first, same as any
+  // mobile chat app. Desktop keeps it open by default.
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 720);
   const [sidebarWidth, setSidebarWidth] = useState(240);
 
   // Drag-to-resize the sidebar. Mousedown on the handle starts a drag that
@@ -217,16 +220,26 @@ export default function Workspace() {
       </header>
 
       <div className="ws-main">
+        {sidebarOpen && window.innerWidth <= 720 && (
+          <div className="ws-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+        )}
         {sidebarOpen && (
           <div className="ws-sidebar-wrap" style={{ width: sidebarWidth }}>
             <Sidebar
               activeView={activeView}
-              onSelectHub={openHub}
+              onSelectHub={() => {
+                openHub();
+                if (window.innerWidth <= 720) setSidebarOpen(false);
+              }}
               onSelectChannel={(channel) => {
                 setJumpToId(undefined);
                 openChannel(channel);
+                if (window.innerWidth <= 720) setSidebarOpen(false);
               }}
-              onSelectDm={openDmByChannel}
+              onSelectDm={(channelId, name) => {
+                openDmByChannel(channelId, name);
+                if (window.innerWidth <= 720) setSidebarOpen(false);
+              }}
               onNewDm={() => setShowNewDm(true)}
               onBrowse={() => setShowBrowse(true)}
               dmRefreshKey={dmRefreshKey}

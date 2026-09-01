@@ -154,7 +154,48 @@
 /* ---- Company Hub ---- */
 .hub { overflow-y: auto; padding: var(--sp-6); }
 .hub-hero, .hub-grid { max-width: 1040px; margin-left: auto; margin-right: auto; }
-.hub-hero { margin-bottom: var(--sp-6); }
+.hub-hero { margin-bottom: var(--sp-6); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
+.hub-date { margin: var(--sp-2) 0 0; font-size: 13px; color: var(--ink-faint); }
+.hub-status-pill {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  padding: 6px 14px; border-radius: 20px; background: #f0fdf4; color: var(--online);
+  font-size: 13px; font-weight: 600;
+}
+.hub-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); }
+
+/* Stats row */
+.hub-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-3); max-width: 1040px; margin: 0 auto var(--sp-5); }
+.hub-stat-card {
+  display: flex; align-items: center; gap: var(--sp-3);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--sp-4);
+}
+.hub-stat-icon { font-size: 22px; }
+.hub-stat-card strong { display: block; font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.1; }
+.hub-stat-card span { font-size: 12px; color: var(--ink-faint); }
+
+/* Error banner for a partially-failed load */
+.hub-error {
+  max-width: 1040px; margin: 0 auto var(--sp-5);
+  padding: 10px 16px; background: #fffaf0; border: 1px solid #fde9c8;
+  border-radius: var(--radius-sm); font-size: 13px; color: var(--away);
+}
+
+/* Loading skeleton */
+.hub-skeleton { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--sp-3); }
+.hub-skeleton-row {
+  height: 90px; border-radius: var(--radius); background: var(--surface-2);
+  background-image: linear-gradient(90deg, var(--surface-2) 0px, var(--surface-3) 40px, var(--surface-2) 80px);
+  background-size: 600px 100%; animation: hub-shimmer 1.4s infinite linear;
+}
+@keyframes hub-shimmer {
+  0% { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+
+@media (max-width: 720px) {
+  .hub-stat-grid { grid-template-columns: repeat(2, 1fr); }
+}
 .hub-eyebrow {
   margin: 0 0 var(--sp-2); font-size: 12px; font-weight: 700;
   letter-spacing: 0.08em; text-transform: uppercase; color: var(--indigo-600);
@@ -162,7 +203,7 @@
 .hub-greeting { margin: 0; font-size: 30px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
 .hub-tagline { margin: var(--sp-2) 0 0; color: var(--ink-faint); font-size: 15px; }
 
-.hub-grid { display: grid; grid-template-columns: 1fr 300px; gap: var(--sp-5); }
+.hub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); align-items: start; }
 .hub-col-narrow { min-width: 0; }
 .hub-card {
   background: var(--surface); border: 1px solid var(--border);
@@ -359,6 +400,15 @@
 
 /* ---- Hub: stacked cards in a column ---- */
 .hub-col { display: flex; flex-direction: column; gap: var(--sp-5); }
+
+/* Full-width card below the 2x2 grid (Your Channels doesn't naturally pair
+   with anything else, so it gets its own row). */
+.hub-full-row { max-width: 1040px; margin: var(--sp-5) auto 0; }
+.hub-chan-list-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.hub-chan-list-row .hub-chan {
+  width: auto; padding: 8px 14px; border: 1px solid var(--border); border-radius: 18px;
+}
+.hub-chan-list-row .hub-chan:hover { background: var(--surface-2); }
 
 /* Birthdays / celebrate card */
 .hub-celebrate { background: linear-gradient(180deg, #fffaf0, var(--surface)); border-color: #fde9c8; }

@@ -1,0 +1,14 @@
+# Netlify build config for the frontend. The repo root is the whole project,
+# so we tell Netlify the frontend lives in the frontend/ subfolder.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+# Single-page-app routing: any path falls back to index.html so client-side
+# routes and refreshes don't 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

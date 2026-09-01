@@ -696,3 +696,41 @@
 @media (max-width: 720px) {
   .chan-back-btn { display: inline-flex; align-items: center; justify-content: center; }
 }
+
+/* ---- Recent conversations card ---- */
+.hub-recent-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.hub-recent {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left;
+  padding: 8px; border: none; background: transparent; border-radius: var(--radius-sm);
+}
+.hub-recent:hover { background: var(--surface-2); }
+.hub-recent-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); }
+.hub-recent-label { font-size: 13px; font-weight: 600; color: var(--ink); }
+.hub-recent-time { font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
+.hub-recent-preview {
+  font-size: 12px; color: var(--ink-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- Your Day (calendar) card ---- */
+.hub-day-card { max-width: 1040px; margin: var(--sp-5) auto 0; }
+.hub-day-tz { font-size: 11px; font-weight: 500; color: var(--ink-faint); }
+.hub-day-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.hub-day-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 10px 0; border-top: 1px solid var(--surface-3);
+}
+.hub-day-item:first-child { border-top: none; }
+.hub-day-time {
+  font-size: 13px; font-weight: 700; color: var(--indigo-700);
+  background: var(--indigo-50); padding: 3px 10px; border-radius: 12px; flex-shrink: 0;
+}
+.hub-day-title { font-size: 14px; color: var(--ink); flex: 1; }
+.hub-day-author { font-size: 12px; color: var(--ink-faint); }
+.hub-event-form { display: flex; align-items: center; gap: var(--sp-2); }
+.hub-event-form input[type="text"], .hub-event-form input:not([type]) {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; width: 160px;
+}
+.hub-event-form input[type="time"] {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px;
+}

@@ -176,6 +176,17 @@ export const channelsApi = {
   },
 };
 
+
+export interface RecentConversation {
+  channel_id: string;
+  content: string;
+  created_at: string;
+  channel_name: string;
+  is_dm: boolean;
+  sender_name: string | null;
+  other_name: string | null;
+}
+
 export const messagesApi = {
   edit: (id: string, content: string) =>
     apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, {
@@ -184,6 +195,7 @@ export const messagesApi = {
     }),
   remove: (id: string) =>
     apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
+  recent: () => apiRequest<{ conversations: RecentConversation[] }>('/api/v1/messages/recent'),
   search: (q: string, channelId?: string) => {
     const c = channelId ? `&channelId=${channelId}` : '';
     return apiRequest<{ results: MessageSearchResult[] }>(
@@ -227,5 +239,22 @@ export const reactionsApi = {
     apiRequest<{ status: 'added' | 'removed' }>('/api/v1/reactions/toggle', {
       method: 'POST',
       body: { targetType, targetId, emoji },
+    }),
+};
+
+export interface Event {
+  id: string;
+  title: string;
+  starts_at: string;
+  created_by: string;
+  author_name: string | null;
+}
+
+export const eventsApi = {
+  today: () => apiRequest<{ events: Event[] }>('/api/v1/events/today'),
+  create: (title: string, startsAt: string) =>
+    apiRequest<{ event: Event }>('/api/v1/events', {
+      method: 'POST',
+      body: { title, startsAt },
     }),
 };

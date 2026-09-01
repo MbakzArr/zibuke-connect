@@ -4,11 +4,15 @@ import {
   directoryApi,
   channelsApi,
   reactionsApi,
+  messagesApi,
+  eventsApi,
   type Announcement,
   type Person,
   type Birthday,
   type Channel,
   type ReactionsMap,
+  type RecentConversation,
+  type Event,
 } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
@@ -18,18 +22,56 @@ import AnnouncementModal from './AnnouncementModal';
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
   onMessagePerson: (person: Person) => void;
+  onOpenConversation: (channelId: string) => void; // jump to a recent chat
+  myName?: string; // for the personalized greeting
 }
 
-// The landing screen. A richer overview than a bare feed: a greeting, an
-// announcements column, and a right rail with who's online, today's
-// birthdays, and quick access to your channels. Everything here is backed by
-// real data from the API, nothing is mocked.
-export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHubProps) {
+// Good morning/afternoon/evening based on the visitor's local clock.
+function timeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+// Short relative time ("2m", "3h", "Yesterday") for the recent chats list.
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  return `${days}d`;
+}
+
+// Always shows the time in SAST (Africa/Johannesburg), regardless of the
+// viewer's own device timezone, per the "one consistent timezone for now"
+// decision.
+function formatSAST(iso: string): string {
+  return new Intl.DateTimeFormat('en-ZA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Africa/Johannesburg',
+  }).format(new Date(iso));
+}
+
+// The landing screen. A richer overview than a bare feed: a personalized
+// greeting, an announcements column, and a right rail with who's online,
+// today's birthdays, recent conversations, and quick access to your
+// channels. Everything here is backed by real data from the API - nothing
+// is mocked (no fake calendar/meeting data).
+export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConversation, myName }: CompanyHubProps) {
   const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [birthdays, setBirthdays] = useState<Birthday[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [recent, setRecent] = useState<RecentConversation[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [annReactions, setAnnReactions] = useState<ReactionsMap>({});
   const [bdayReactions, setBdayReactions] = useState<ReactionsMap>({});
   const [openAnn, setOpenAnn] = useState<Announcement | null>(null);
@@ -52,6 +94,8 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
       }
     });
     channelsApi.list().then((d) => setChannels(d.channels));
+    messagesApi.recent().then((d) => setRecent(d.conversations));
+    eventsApi.today().then((d) => setEvents(d.events));
   }, []);
 
   const online = people.filter((p) => p.status === 'online');
@@ -61,8 +105,10 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
     <section className="hub">
       <div className="hub-hero">
         <p className="hub-eyebrow">Company Hub</p>
-        <h1 className="hub-greeting">Welcome back</h1>
-        <p className="hub-tagline">Everything happening across Zibuke, in one place.</p>
+        <h1 className="hub-greeting">
+          {timeGreeting()}{myName ? `, ${myName.split(' ')[0]}` : ''} 👋
+        </h1>
+        <p className="hub-tagline">Here's what's happening across Zibuke today.</p>
       </div>
 
       <div className="hub-grid">
@@ -156,6 +202,33 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
             </ul>
           </div>
 
+          {recent.length > 0 && (
+            <div className="hub-card">
+              <div className="hub-card-head">
+                <h3>Recent conversations</h3>
+              </div>
+              <ul className="hub-recent-list">
+                {recent.map((r) => {
+                  const label = r.is_dm ? (r.other_name || 'Direct message') : `#${r.channel_name}`;
+                  return (
+                    <li key={r.channel_id}>
+                      <button className="hub-recent" onClick={() => onOpenConversation(r.channel_id)}>
+                        <span className="hub-recent-top">
+                          <span className="hub-recent-label">{label}</span>
+                          <span className="hub-recent-time">{timeAgo(r.created_at)}</span>
+                        </span>
+                        <span className="hub-recent-preview">
+                          {r.is_dm ? '' : `${r.sender_name || 'Someone'}: `}
+                          {r.content}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
           <div className="hub-card">
             <div className="hub-card-head">
               <h3>Your channels</h3>
@@ -175,6 +248,24 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
           </div>
         </div>
       </div>
+
+      <div className="hub-card hub-day-card">
+        <div className="hub-card-head">
+          <h3>📅 Your day <span className="hub-day-tz">(SAST)</span></h3>
+          <AddEventForm onCreated={(e) => setEvents((prev) => [...prev, e].sort((a, b) => a.starts_at.localeCompare(b.starts_at)))} />
+        </div>
+        {events.length === 0 && <p className="hub-muted">Nothing scheduled for today.</p>}
+        <ul className="hub-day-list">
+          {events.map((e) => (
+            <li key={e.id} className="hub-day-item">
+              <span className="hub-day-time">{formatSAST(e.starts_at)}</span>
+              <span className="hub-day-title">{e.title}</span>
+              {e.author_name && <span className="hub-day-author">{e.author_name}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+
       {openAnn && (
         <AnnouncementModal
           announcement={openAnn}
@@ -183,6 +274,54 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
         />
       )}
     </section>
+  );
+}
+
+// Small inline form to add a "today" event. The time input is treated as
+// SAST explicitly (not the browser's local timezone) - since SAST has a
+// fixed +2 offset with no daylight saving, appending "+02:00" to whatever
+// time the user types converts it to the correct UTC instant every time.
+function AddEventForm({ onCreated }: { onCreated: (e: Event) => void }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [time, setTime] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (!title.trim() || !time) return;
+    setBusy(true);
+    try {
+      // "YYYY-MM-DD" for today, combined with the chosen HH:mm, explicitly
+      // in SAST (+02:00, fixed, no DST).
+      const todayDate = new Date().toISOString().slice(0, 10);
+      const startsAt = `${todayDate}T${time}:00+02:00`;
+      const { event } = await eventsApi.create(title.trim(), startsAt);
+      onCreated(event);
+      setTitle('');
+      setTime('');
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button className="hub-post-btn" onClick={() => setOpen(true)}>
+        + Add
+      </button>
+    );
+  }
+
+  return (
+    <div className="hub-event-form">
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title" />
+      <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+      <button className="hub-post-cancel" onClick={() => setOpen(false)}>Cancel</button>
+      <button className="hub-post-send" onClick={submit} disabled={busy}>
+        {busy ? 'Adding...' : 'Add'}
+      </button>
+    </div>
   );
 }
 

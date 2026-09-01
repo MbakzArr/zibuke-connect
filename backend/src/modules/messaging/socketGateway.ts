@@ -4,7 +4,7 @@ import { socketAuth, AuthedSocket } from './socketAuth';
 import { markOnline, markOffline } from './presence.service';
 import { createMessage } from './messaging.service';
 import { processMentions } from './mentions.service';
-import { getChannel, isMember, getDmRecipient } from '../channels/channels.service';
+import { getChannel, isMember, getDmRecipient, getOtherChannelMemberIds } from '../channels/channels.service';
 import { setIo } from './realtime';
 import { createNotification } from '../notifications/notifications.service';
 import { pool } from '../../db/pool';
@@ -104,6 +104,19 @@ export function attachSocketServer(httpServer: http.Server) {
         // Broadcast to everyone currently in the room, including the sender,
         // so all clients render the same server-authoritative message.
         io.to(`channel:${channelId}`).emit('message:new', message);
+
+        // Tell every OTHER channel member there's new activity, even if they
+        // don't have this channel open (so their sidebar unread dot updates
+        // live, not just on next navigation). Uses each person's own
+        // "user:<id>" room, which every connected socket already joins, so
+        // this doesn't require joining every channel's room.
+        getOtherChannelMemberIds(channelId, user.userId)
+          .then((memberIds) => {
+            for (const memberId of memberIds) {
+              io.to(`user:${memberId}`).emit('channel:activity', { channelId });
+            }
+          })
+          .catch((err) => console.error('channel:activity broadcast failed:', err));
 
         // Handle any @mentions: record them and notify the mentioned members.
         // Done after the broadcast so message delivery is never held up by

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { channelsApi, type Channel, type Dm } from '../api/resources';
 import { useNotifications } from '../context/NotificationsContext';
+import { useSocket } from '../context/SocketContext';
 
 interface SidebarProps {
   activeView: string; // 'hub' or a channel id
@@ -29,6 +30,21 @@ export default function Sidebar({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const { unreadDmChannelIds } = useNotifications();
+  const socket = useSocket();
+  // Channels flagged unread LIVE by the socket, on top of what the last
+  // fetch said. Cleared the moment the user opens that channel.
+  const [liveUnread, setLiveUnread] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!socket) return;
+    function onActivity(p: { channelId: string }) {
+      setLiveUnread((prev) => new Set(prev).add(p.channelId));
+    }
+    socket.on('channel:activity', onActivity);
+    return () => {
+      socket.off('channel:activity', onActivity);
+    };
+  }, [socket]);
 
   async function loadChannels() {
     const data = await channelsApi.list();
@@ -96,12 +112,20 @@ export default function Sidebar({
 
         <ul className="side-list">
           {channels.map((c) => {
-            const hasUnread = c.has_unread && activeView !== c.id;
+            const hasUnread = (c.has_unread || liveUnread.has(c.id)) && activeView !== c.id;
             return (
               <li key={c.id}>
                 <button
                   className={`side-item ${activeView === c.id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
-                  onClick={() => onSelectChannel(c)}
+                  onClick={() => {
+                    setLiveUnread((prev) => {
+                      if (!prev.has(c.id)) return prev;
+                      const next = new Set(prev);
+                      next.delete(c.id);
+                      return next;
+                    });
+                    onSelectChannel(c);
+                  }}
                 >
                   <span className="side-hash">{c.is_private ? '🔒' : '#'}</span>
                   <span className="side-dm-name">{c.name}</span>

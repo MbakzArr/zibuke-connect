@@ -339,3 +339,14 @@ export async function searchChannelsAndDms(organizationId: string, userId: strin
 
   return { channels: channels.rows, dms: dms.rows };
 }
+
+// Ids of every OTHER member of a channel (excludes the given user). Used to
+// ping people with "this channel has new activity" without needing every
+// client to join every channel's socket room.
+export async function getOtherChannelMemberIds(channelId: string, excludeUserId: string): Promise<string[]> {
+  const result = await pool.query(
+    'SELECT user_id FROM channel_members WHERE channel_id = $1 AND user_id <> $2',
+    [channelId, excludeUserId]
+  );
+  return result.rows.map((r) => r.user_id);
+}

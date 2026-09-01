@@ -10,6 +10,7 @@ import {
   getOrCreateDm,
   listDmsForUser,
   listBrowsableChannels,
+  markChannelRead,
   searchChannelsAndDms,
 } from './channels.service';
 
@@ -163,5 +164,15 @@ export async function searchPlaces(req: Request, res: Response) {
   } catch (err) {
     console.error('Search places error:', err);
     return res.status(500).json({ error: 'Could not search channels' });
+  }
+}
+
+export async function markRead(req: Request, res: Response) {
+  try {
+    await markChannelRead(req.user!.userId, req.params.id);
+    return res.json({ read: true });
+  } catch (err) {
+    console.error('Mark channel read error:', err);
+    return res.status(500).json({ error: 'Could not update read status' });
   }
 }

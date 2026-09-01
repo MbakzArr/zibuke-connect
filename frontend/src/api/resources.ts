@@ -12,6 +12,7 @@ export interface Channel {
   created_by: string;
   created_at: string;
   member_count?: string;
+  has_unread?: boolean;
 }
 
 export interface Message {
@@ -161,6 +162,8 @@ export const channelsApi = {
   browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
   members: (channelId: string) =>
     apiRequest<{ members: ChannelMember[] }>(`/api/v1/channels/${channelId}/members`),
+  markRead: (channelId: string) =>
+    apiRequest(`/api/v1/channels/${channelId}/read`, { method: 'PATCH' }),
   searchPlaces: (q: string) =>
     apiRequest<{ channels: PlaceChannel[]; dms: PlaceDm[] }>(`/api/v1/channels/search?q=${encodeURIComponent(q)}`),
   openDm: (userId: string) =>

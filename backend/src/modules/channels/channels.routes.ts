@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/requireAuth';
-import { list, getOne, create, join, leave, members, openDm, listDms, browse, searchPlaces } from './channels.controller';
+import { list, getOne, create, join, leave, members, openDm, listDms, browse, searchPlaces, markRead } from './channels.controller';
 
 const router = Router();
 
@@ -15,6 +15,7 @@ router.post('/dm/:userId', openDm);
 router.get('/:id', getOne);
 router.get('/:id/members', members);
 router.post('/:id/join', join);
+router.patch('/:id/read', markRead);
 router.post('/:id/leave', leave);
 
 export default router;

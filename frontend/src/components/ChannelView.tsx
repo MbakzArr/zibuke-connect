@@ -56,6 +56,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
       }
     }
     load();
+    // Mark it read on the server so its unread badge clears in the sidebar.
+    // DMs use a separate read-tracking path (notifications), so only do this
+    // for real channels.
+    if (!dmTitle) {
+      channelsApi.markRead(channel.id).catch(() => {
+        // best-effort; a failed mark-read just leaves the badge showing
+      });
+    }
     return () => {
       cancelled = true;
     };

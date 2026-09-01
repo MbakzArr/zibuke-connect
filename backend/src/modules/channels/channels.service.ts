@@ -19,7 +19,17 @@ interface CreateChannelInput {
 export async function listChannelsForUser(organizationId: string, userId: string) {
   const result = await pool.query(
     `SELECT DISTINCT c.id, c.name, c.department_id, c.is_private, c.created_by, c.created_at,
-            (SELECT COUNT(*) FROM channel_members cm2 WHERE cm2.channel_id = c.id) AS member_count
+            (SELECT COUNT(*) FROM channel_members cm2 WHERE cm2.channel_id = c.id) AS member_count,
+            EXISTS (
+              SELECT 1 FROM messages m
+              WHERE m.channel_id = c.id
+                AND m.deleted_at IS NULL
+                AND m.user_id <> $2
+                AND m.created_at > COALESCE(
+                  (SELECT last_read_at FROM channel_reads cr WHERE cr.channel_id = c.id AND cr.user_id = $2),
+                  '-infinity'
+                )
+            ) AS has_unread
      FROM channels c
      LEFT JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
      WHERE c.organization_id = $1
@@ -29,6 +39,17 @@ export async function listChannelsForUser(organizationId: string, userId: string
     [organizationId, userId]
   );
   return result.rows;
+}
+
+// Mark a channel as read by this user right now. Called when they open it.
+export async function markChannelRead(userId: string, channelId: string) {
+  await pool.query(
+    `INSERT INTO channel_reads (user_id, channel_id, last_read_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (user_id, channel_id) DO UPDATE SET last_read_at = now()`,
+    [userId, channelId]
+  );
+  return true;
 }
 
 export async function getChannel(organizationId: string, channelId: string) {

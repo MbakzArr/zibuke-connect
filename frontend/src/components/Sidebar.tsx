@@ -40,9 +40,14 @@ export default function Sidebar({
     setDms(data.dms);
   }
 
+  // Reload channels on mount, and again whenever the active view changes
+  // (opening a channel, the hub, etc). This is what keeps unread badges
+  // reasonably current without a full live-push system: navigating around
+  // the app is exactly when it's worth re-checking what's changed.
   useEffect(() => {
     loadChannels();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
 
   // Reload DMs whenever the parent signals a new one was opened, or when the
   // set of unread DM channels changes (a new DM from someone not yet in the
@@ -90,17 +95,21 @@ export default function Sidebar({
         )}
 
         <ul className="side-list">
-          {channels.map((c) => (
-            <li key={c.id}>
-              <button
-                className={`side-item ${activeView === c.id ? 'is-active' : ''}`}
-                onClick={() => onSelectChannel(c)}
-              >
-                <span className="side-hash">{c.is_private ? '🔒' : '#'}</span>
-                {c.name}
-              </button>
-            </li>
-          ))}
+          {channels.map((c) => {
+            const hasUnread = c.has_unread && activeView !== c.id;
+            return (
+              <li key={c.id}>
+                <button
+                  className={`side-item ${activeView === c.id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
+                  onClick={() => onSelectChannel(c)}
+                >
+                  <span className="side-hash">{c.is_private ? '🔒' : '#'}</span>
+                  <span className="side-dm-name">{c.name}</span>
+                  {hasUnread && <span className="side-unread-dot" />}
+                </button>
+              </li>
+            );
+          })}
           {channels.length === 0 && <li className="side-empty">No channels yet.</li>}
         </ul>
         <button className="side-browse" onClick={onBrowse}>Browse channels</button>

@@ -11,6 +11,7 @@ import BrowseChannels from '../components/BrowseChannels';
 import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
+import ProfileModal from '../components/ProfileModal';
 import { channelsApi, announcementsApi, directoryApi, type Channel, type Person, type Announcement } from '../api/resources';
 import './Workspace.css';
 
@@ -32,6 +33,8 @@ export default function Workspace() {
   // mobile chat app. Desktop keeps it open by default.
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 720);
   const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [profileViewUserId, setProfileViewUserId] = useState<string | null>(null);
 
   // Drag-to-resize the sidebar. Mousedown on the handle starts a drag that
   // updates the width live, clamped so it stays usable.
@@ -201,23 +204,73 @@ export default function Workspace() {
           <span className="ws-name">Zibuke Connect</span>
         </div>
         <div className="ws-header-right">
-          <button className="ws-search-field" onClick={() => setShowSearch(true)}>
+          <button className="ws-search-field" onClick={() => setShowSearch(true)} title="Search">
             <span className="ws-search-icon">🔍</span>
             <span className="ws-search-placeholder">Search Zibuke</span>
           </button>
-          <span className={`ws-status ${connected ? 'is-online' : ''}`}>
-            {connected ? 'Connected' : 'Connecting...'}
-          </span>
           <NotificationBell onNavigateToChannel={navigateToChannel} onOpenAnnouncement={openAnnouncementById} />
-          <div className="ws-account" title={`Signed in as ${myName}`}>
-            <span className="ws-account-avatar" style={{ background: user ? colorFor(user.id) : '#4f46e5' }}>
-              {(myName || 'Y').charAt(0).toUpperCase()}
-            </span>
-            <span className="ws-account-name">{myName}</span>
+          <div className="ws-account-wrap">
+            <button
+              className="ws-account"
+              onClick={() => setAccountMenuOpen((o) => !o)}
+              title={`Signed in as ${myName}`}
+            >
+              <span className="ws-account-avatar" style={{ background: user ? colorFor(user.id) : '#4f46e5' }}>
+                {(myName || 'Y').charAt(0).toUpperCase()}
+              </span>
+              <span className="ws-account-name">{myName}</span>
+            </button>
+            {accountMenuOpen && (
+              <>
+                <div className="ws-account-overlay" onClick={() => setAccountMenuOpen(false)} />
+                <div className="ws-account-menu">
+                  <div className="ws-account-menu-head">
+                    <span className="ws-account-avatar" style={{ background: user ? colorFor(user.id) : '#4f46e5' }}>
+                      {(myName || 'Y').charAt(0).toUpperCase()}
+                    </span>
+                    <div>
+                      <div className="ws-account-menu-name">{myName}</div>
+                      <div className={`ws-account-menu-status ${connected ? 'is-online' : ''}`}>
+                        {connected ? 'Connected' : 'Connecting...'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    className="ws-account-menu-item"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      if (user) setProfileViewUserId(user.id);
+                    }}
+                  >
+                    👤 View profile
+                  </button>
+                  <button className="ws-account-menu-item ws-account-menu-danger" onClick={logout}>
+                    ⎋ Sign out
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-          <button className="ws-logout" onClick={logout}>Sign out</button>
         </div>
       </header>
+
+      {profileViewUserId && (
+        <ProfileModal
+          userId={profileViewUserId}
+          onClose={() => setProfileViewUserId(null)}
+          onMessage={(userId, name) => {
+            setProfileViewUserId(null);
+            openDmWithPerson({
+              id: userId,
+              email: '',
+              status: 'offline',
+              full_name: name,
+              job_title: null,
+              department_name: null,
+            });
+          }}
+        />
+      )}
 
       <div className="ws-main">
         {sidebarOpen && window.innerWidth <= 720 && (

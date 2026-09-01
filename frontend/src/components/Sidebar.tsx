@@ -6,7 +6,7 @@ interface SidebarProps {
   activeView: string; // 'hub' or a channel id
   onSelectHub: () => void;
   onSelectChannel: (channel: Channel) => void;
-  onSelectDm: (channelId: string, personName: string) => void;
+  onSelectDm: (channelId: string, personName: string, userId: string) => void;
   onNewDm: () => void;
   onBrowse: () => void;
   // bumped by the parent when a new DM is opened, so the list refreshes
@@ -119,7 +119,7 @@ export default function Sidebar({
               <li key={dm.channel_id}>
                 <button
                   className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
-                  onClick={() => onSelectDm(dm.channel_id, (dm.full_name || 'Direct message') + (dm.is_self ? ' (you)' : ''))}
+                  onClick={() => onSelectDm(dm.channel_id, (dm.full_name || 'Direct message') + (dm.is_self ? ' (you)' : ''), dm.user_id)}
                 >
                   <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
                   <span className="side-dm-name">{dm.full_name || 'Unknown'}{dm.is_self ? ' (you)' : ''}</span>

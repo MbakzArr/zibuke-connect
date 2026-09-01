@@ -25,6 +25,7 @@ export default function Workspace() {
   const [view, setView] = useState<'hub' | 'channel'>('hub');
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [dmTitle, setDmTitle] = useState<string | undefined>(undefined);
+  const [dmUserId, setDmUserId] = useState<string | undefined>(undefined);
   const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
   const [myName, setMyName] = useState<string>('');
@@ -100,9 +101,11 @@ export default function Workspace() {
         setView('hub');
         setActiveChannel(null);
         setDmTitle(undefined);
+        setDmUserId(undefined);
       } else {
         setActiveChannel(state.channel);
         setDmTitle(state.dmTitle);
+        setDmUserId(undefined); // browser back doesn't carry this; re-selecting the DM restores it
         setView('channel');
       }
     }
@@ -114,6 +117,7 @@ export default function Workspace() {
   function openChannel(channel: Channel) {
     setActiveChannel(channel);
     setDmTitle(undefined);
+    setDmUserId(undefined);
     setView('channel');
     pushHistory({ view: 'channel', channel });
   }
@@ -122,12 +126,13 @@ export default function Workspace() {
     setView('hub');
     setActiveChannel(null);
     setDmTitle(undefined);
+    setDmUserId(undefined);
     setJumpToId(undefined);
     pushHistory({ view: 'hub' });
   }
 
   // Open a DM by its existing channel id (from the sidebar list).
-  function openDmByChannel(channelId: string, personName: string) {
+  function openDmByChannel(channelId: string, personName: string, userId?: string) {
     clearDmUnread(channelId);
     const channel: Channel = {
       id: channelId,
@@ -139,6 +144,7 @@ export default function Workspace() {
     };
     setActiveChannel(channel);
     setDmTitle(personName);
+    setDmUserId(userId);
     setView('channel');
     pushHistory({ view: 'channel', channel, dmTitle: personName });
   }
@@ -148,7 +154,7 @@ export default function Workspace() {
   async function openDmWithPerson(person: Person) {
     try {
       const { channel } = await channelsApi.openDm(person.id);
-      onDmOpened(channel, person.full_name || person.email);
+      onDmOpened(channel, person.full_name || person.email, person.id);
     } catch (err) {
       console.error(err);
     }
@@ -156,10 +162,11 @@ export default function Workspace() {
   }
 
   // Called when the modal successfully opens (or reuses) a DM channel.
-  function onDmOpened(channel: Channel, personName: string) {
+  function onDmOpened(channel: Channel, personName: string, userId?: string) {
     setShowNewDm(false);
     setActiveChannel(channel);
     setDmTitle(personName);
+    setDmUserId(userId);
     setView('channel');
     setDmRefreshKey((k) => k + 1); // refresh the sidebar DM list
     pushHistory({ view: 'channel', channel, dmTitle: personName });
@@ -324,8 +331,8 @@ export default function Workspace() {
                 openChannel(channel);
                 if (window.innerWidth <= 720) setSidebarOpen(false);
               }}
-              onSelectDm={(channelId, name) => {
-                openDmByChannel(channelId, name);
+              onSelectDm={(channelId, name, userId) => {
+                openDmByChannel(channelId, name, userId);
                 if (window.innerWidth <= 720) setSidebarOpen(false);
               }}
               onNewDm={() => setShowNewDm(true)}
@@ -342,6 +349,7 @@ export default function Workspace() {
             <ChannelView
               channel={activeChannel}
               dmTitle={dmTitle}
+              dmUserId={dmUserId}
               jumpToId={jumpToId}
               onOpenDm={(userId, name) =>
                 openDmWithPerson({

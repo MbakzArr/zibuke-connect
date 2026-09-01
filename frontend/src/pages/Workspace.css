@@ -83,8 +83,21 @@
   padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .chan-title { margin: 0; font-size: 16px; display: flex; align-items: center; gap: var(--sp-2); }
+.chan-title-clickable {
+  border: none; background: transparent; padding: 4px 8px; border-radius: var(--radius-sm);
+  font-weight: 650; color: var(--ink); cursor: pointer;
+}
+.chan-title-clickable:hover:not(:disabled) { background: var(--surface-2); color: var(--indigo-700); }
+.chan-title-clickable:disabled { cursor: default; }
 .chan-hash { color: var(--ink-faint); }
-.chan-messages { flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-5); position: relative; }
+.chan-messages {
+  flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-5); position: relative;
+}
+/* Cap the actual message content to a sane reading width on wide desktop
+   monitors, centered, instead of letting bubbles stretch edge-to-edge. This
+   is what was reading as "too much whitespace" - it wasn't empty, it was
+   just unbounded. */
+.chan-messages > * { max-width: 860px; margin-left: auto; margin-right: auto; }
 .chan-empty { color: var(--ink-faint); font-size: 14px; text-align: center; margin-top: var(--sp-8); }
 
 /* A message row. Others align left, your own align right. */
@@ -120,8 +133,11 @@
 .chan-typing { height: 20px; padding: 0 var(--sp-5); font-size: 12px; color: var(--ink-faint); font-style: italic; }
 
 .chan-composer {
-  display: flex; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.chan-composer-inner {
+  display: flex; gap: var(--sp-3); max-width: 860px; margin: 0 auto;
 }
 .chan-composer input {
   flex: 1; padding: 11px 14px; border: 1px solid var(--border);
@@ -137,6 +153,7 @@
 
 /* ---- Company Hub ---- */
 .hub { overflow-y: auto; padding: var(--sp-6); }
+.hub-hero, .hub-grid { max-width: 1040px; margin-left: auto; margin-right: auto; }
 .hub-hero { margin-bottom: var(--sp-6); }
 .hub-eyebrow {
   margin: 0 0 var(--sp-2); font-size: 12px; font-weight: 700;

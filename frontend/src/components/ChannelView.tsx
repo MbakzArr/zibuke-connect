@@ -10,6 +10,7 @@ import Reactions from './Reactions';
 interface ChannelViewProps {
   channel: Channel;
   dmTitle?: string; // when set, this is a DM and we show the person's name
+  dmUserId?: string; // the other person's user id, for viewing their profile
   jumpToId?: string; // when set, scroll to and flash this message after load
   onOpenDm?: (userId: string, name: string) => void; // open a DM (from a profile)
   onBack?: () => void; // mobile: return to the Company Hub
@@ -18,7 +19,7 @@ interface ChannelViewProps {
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm, onBack }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOpenDm, onBack }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -253,19 +254,22 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm, onBa
             ←
           </button>
         )}
-        <h2 className="chan-title">
-          {dmTitle ? (
-            <>
-              <span className="chan-dm-icon">@</span>
-              {dmTitle}
-            </>
-          ) : (
-            <>
-              <span className="chan-hash">{channel.is_private ? '🔒' : '#'}</span>
-              {channel.name}
-            </>
-          )}
-        </h2>
+        {dmTitle ? (
+          <button
+            className="chan-title chan-title-clickable"
+            onClick={() => dmUserId && setProfileUserId(dmUserId)}
+            disabled={!dmUserId}
+            title={dmUserId ? 'View profile' : undefined}
+          >
+            <span className="chan-dm-icon">@</span>
+            {dmTitle}
+          </button>
+        ) : (
+          <h2 className="chan-title">
+            <span className="chan-hash">{channel.is_private ? '🔒' : '#'}</span>
+            {channel.name}
+          </h2>
+        )}
         <div className="chan-head-actions">
           {!dmTitle && (
             <button className="chan-members-btn" onClick={() => setShowMembers(true)} title="View members">
@@ -397,13 +401,15 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm, onBa
       </div>
 
       <div className="chan-composer">
-        <input
-          value={draft}
-          onChange={(e) => handleTyping(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && send()}
-          placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
-        />
-        <button onClick={send} disabled={!draft.trim()}>Send</button>
+        <div className="chan-composer-inner">
+          <input
+            value={draft}
+            onChange={(e) => handleTyping(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && send()}
+            placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
+          />
+          <button onClick={send} disabled={!draft.trim()}>Send</button>
+        </div>
       </div>
 
       {showMembers && (

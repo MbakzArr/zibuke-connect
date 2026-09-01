@@ -77,6 +77,9 @@ export interface Notification {
   message_channel_id?: string | null;
   sender_name?: string | null;
   announcement_title?: string | null;
+  event_title?: string | null;
+  event_starts_at?: string | null;
+  event_venue?: string | null;
 }
 
 

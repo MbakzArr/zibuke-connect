@@ -8,12 +8,15 @@ interface NotificationBellProps {
   onNavigateToChannel: (channelId: string) => void;
   // Called to open an announcement by its id.
   onOpenAnnouncement: (announcementId: string) => void;
+  // Called with the notification's own event fields (already hydrated by
+  // the API, no extra fetch needed) to show event details.
+  onOpenEvent: (event: { title: string; startsAt: string; venue: string | null }) => void;
 }
 
 // Header bell. Shows an unread badge and a dropdown of recent notifications,
 // each with a real preview. Mention and DM items jump to the conversation;
-// announcement items open the announcement.
-export default function NotificationBell({ onNavigateToChannel, onOpenAnnouncement }: NotificationBellProps) {
+// announcement and event items open their details.
+export default function NotificationBell({ onNavigateToChannel, onOpenAnnouncement, onOpenEvent }: NotificationBellProps) {
   const { notifications, unreadCount, markAllRead } = useNotifications();
   const [open, setOpen] = useState(false);
 
@@ -47,12 +50,27 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
         clickable: true,
       };
     }
+    if (n.type === 'event') {
+      const timeStr = n.event_starts_at
+        ? new Intl.DateTimeFormat('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Johannesburg' }).format(new Date(n.event_starts_at))
+        : '';
+      return {
+        title: `You're invited: ${n.event_title || 'an event'}`,
+        preview: [timeStr, n.event_venue].filter(Boolean).join(' · ') || null,
+        clickable: !!n.event_title,
+      };
+    }
     return { title: 'Notification', preview: null, clickable: false };
   }
 
   function handleClick(n: Notification) {
     if (n.type === 'announcement') {
       onOpenAnnouncement(n.source_id);
+      setOpen(false);
+      return;
+    }
+    if (n.type === 'event' && n.event_title && n.event_starts_at) {
+      onOpenEvent({ title: n.event_title, startsAt: n.event_starts_at, venue: n.event_venue || null });
       setOpen(false);
       return;
     }

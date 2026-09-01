@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { channelsApi, messagesApi, reactionsApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
+import { channelsApi, messagesApi, reactionsApi, directoryApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
+import { statusColor, statusLabel } from '../util/status';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { colorFor } from '../util/avatarColor';
@@ -30,6 +31,37 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const [dmStatus, setDmStatus] = useState<{ status: string; availability: string | null } | null>(null);
+
+  // Fetch the other person's live status when a DM is opened, so the header
+  // shows a real "Available"/"Busy"/"Away"/"Offline" instead of nothing.
+  useEffect(() => {
+    if (!dmUserId) {
+      setDmStatus(null);
+      return;
+    }
+    let cancelled = false;
+    directoryApi.profile(dmUserId).then((d) => {
+      if (!cancelled) setDmStatus({ status: d.profile.status, availability: d.profile.availability || null });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dmUserId]);
+
+  // Live update if the DM partner changes their status while this DM is open.
+  useEffect(() => {
+    if (!socket || !dmUserId) return;
+    function onAvailability(p: { userId: string; availability: string }) {
+      if (p.userId === dmUserId) {
+        setDmStatus((prev) => (prev ? { ...prev, availability: p.availability } : prev));
+      }
+    }
+    socket.on('availability:update', onAvailability);
+    return () => {
+      socket.off('availability:update', onAvailability);
+    };
+  }, [socket, dmUserId]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
@@ -263,15 +295,23 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           </button>
         )}
         {dmTitle ? (
-          <button
-            className="chan-title chan-title-clickable"
-            onClick={() => dmUserId && setProfileUserId(dmUserId)}
-            disabled={!dmUserId}
-            title={dmUserId ? 'View profile' : undefined}
-          >
-            <span className="chan-dm-icon">@</span>
-            {dmTitle}
-          </button>
+          <div className="chan-dm-title-wrap">
+            <button
+              className="chan-title chan-title-clickable"
+              onClick={() => dmUserId && setProfileUserId(dmUserId)}
+              disabled={!dmUserId}
+              title={dmUserId ? 'View profile' : undefined}
+            >
+              <span className="chan-dm-icon">@</span>
+              {dmTitle}
+            </button>
+            {dmStatus && (
+              <span className="chan-dm-status">
+                <span className="chan-dm-status-dot" style={{ background: statusColor(dmStatus.status, dmStatus.availability) }} />
+                {statusLabel(dmStatus.status, dmStatus.availability)}
+              </span>
+            )}
+          </div>
         ) : (
           <h2 className="chan-title">
             <span className="chan-hash">{channel.is_private ? '🔒' : '#'}</span>

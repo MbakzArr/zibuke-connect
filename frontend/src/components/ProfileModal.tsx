@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { directoryApi, type FullProfile } from '../api/resources';
 import { colorFor } from '../util/avatarColor';
+import { statusColor, statusLabel } from '../util/status';
 
 interface ProfileModalProps {
   userId: string;
@@ -35,8 +36,9 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
               <div>
                 <div className="profile-name">{profile.full_name || profile.email}</div>
                 {profile.job_title && <div className="profile-role">{profile.job_title}</div>}
-                <div className={`profile-status ${profile.status === 'online' ? 'is-on' : ''}`}>
-                  {profile.status === 'online' ? 'Online' : 'Offline'}
+                <div className="profile-status">
+                  <span className="profile-status-dot" style={{ background: statusColor(profile.status, profile.availability) }} />
+                  {statusLabel(profile.status, profile.availability)}
                 </div>
               </div>
             </div>

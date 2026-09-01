@@ -12,6 +12,7 @@ import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
 import ProfileModal from '../components/ProfileModal';
+import EventDetailModal from '../components/EventDetailModal';
 import { channelsApi, announcementsApi, directoryApi, usersApi, type Channel, type Person, type Announcement } from '../api/resources';
 import './Workspace.css';
 
@@ -28,6 +29,7 @@ export default function Workspace() {
   const [dmUserId, setDmUserId] = useState<string | undefined>(undefined);
   const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
+  const [openEventDetail, setOpenEventDetail] = useState<{ title: string; startsAt: string; venue: string | null } | null>(null);
   const [myName, setMyName] = useState<string>('');
   // On phone-width screens, start with the sidebar hidden so the main
   // content (Company Hub / channel) is what people see first, same as any
@@ -254,7 +256,11 @@ export default function Workspace() {
             <span className="ws-search-icon">🔍</span>
             <span className="ws-search-placeholder">Search Zibuke</span>
           </button>
-          <NotificationBell onNavigateToChannel={navigateToChannel} onOpenAnnouncement={openAnnouncementById} />
+          <NotificationBell
+            onNavigateToChannel={navigateToChannel}
+            onOpenAnnouncement={openAnnouncementById}
+            onOpenEvent={setOpenEventDetail}
+          />
           <div className="ws-account-wrap">
             <button
               className="ws-account"
@@ -376,6 +382,7 @@ export default function Workspace() {
               onOpenConversation={navigateToChannel}
               onBrowseChannels={() => setShowBrowse(true)}
               myName={myName}
+              myAvailability={availability}
             />
           ) : activeChannel ? (
             <ChannelView
@@ -443,6 +450,9 @@ export default function Workspace() {
           announcement={openAnnouncement}
           onClose={() => setOpenAnnouncement(null)}
         />
+      )}
+      {openEventDetail && (
+        <EventDetailModal event={openEventDetail} onClose={() => setOpenEventDetail(null)} />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { setAvailability } from './users.service';
+import { broadcastToOrg } from '../messaging/realtime';
 
 export async function updateAvailability(req: Request, res: Response) {
   try {
@@ -8,6 +9,13 @@ export async function updateAvailability(req: Request, res: Response) {
       return res.status(400).json({ error: 'availability is required' });
     }
     await setAvailability(req.user!.userId, availability);
+    // Broadcast live so anyone viewing this person's status (People Online,
+    // a DM header, their profile card) updates without needing a refresh -
+    // same org-wide pattern already used for live reaction counts.
+    broadcastToOrg(req.user!.organizationId, 'availability:update', {
+      userId: req.user!.userId,
+      availability,
+    });
     return res.json({ availability });
   } catch (err: any) {
     if (err.message === 'INVALID_AVAILABILITY') {

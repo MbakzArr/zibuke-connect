@@ -15,10 +15,13 @@ import {
   type Event,
 } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { colorFor } from '../util/avatarColor';
+import { statusColor, statusLabel } from '../util/status';
 import Reactions from './Reactions';
 import AnnouncementModal from './AnnouncementModal';
 import PeopleDirectoryModal from './PeopleDirectoryModal';
+import EventListItem from './EventListItem';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
@@ -26,6 +29,7 @@ interface CompanyHubProps {
   onOpenConversation: (channelId: string) => void; // jump to a recent chat
   onBrowseChannels?: () => void; // opens the browse-channels modal
   myName?: string; // for the personalized greeting
+  myAvailability?: 'available' | 'busy' | 'away'; // for the hero status pill
 }
 
 // Good morning/afternoon/evening based on the visitor's local clock.
@@ -49,25 +53,28 @@ function timeAgo(iso: string): string {
   return `${days}d`;
 }
 
-// Always shows the time in SAST (Africa/Johannesburg), regardless of the
-// viewer's own device timezone, per the "one consistent timezone for now"
-// decision.
-function formatSAST(iso: string): string {
-  return new Intl.DateTimeFormat('en-ZA', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Africa/Johannesburg',
-  }).format(new Date(iso));
-}
-
 // The landing screen. A richer overview than a bare feed: a personalized
 // greeting, an announcements column, and a right rail with who's online,
 // today's birthdays, recent conversations, and quick access to your
 // channels. Everything here is backed by real data from the API - nothing
 // is mocked (no fake calendar/meeting data).
-export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConversation, onBrowseChannels, myName }: CompanyHubProps) {
+export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConversation, onBrowseChannels, myName, myAvailability }: CompanyHubProps) {
   const { user } = useAuth();
+  const socket = useSocket();
+
+  // Live availability updates: when anyone changes their status, patch it
+  // into the people list in place, so People Online reflects it without a
+  // refresh.
+  useEffect(() => {
+    if (!socket) return;
+    function onAvailability(p: { userId: string; availability: string }) {
+      setPeople((prev) => prev.map((person) => (person.id === p.userId ? { ...person, availability: p.availability } : person)));
+    }
+    socket.on('availability:update', onAvailability);
+    return () => {
+      socket.off('availability:update', onAvailability);
+    };
+  }, [socket]);
   const announcementsRef = useRef<HTMLDivElement>(null);
   const peopleRef = useRef<HTMLDivElement>(null);
   const [announcementsExpanded, setAnnouncementsExpanded] = useState(false);
@@ -159,8 +166,8 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           <p className="hub-date">{todayLabel}</p>
         </div>
         <div className="hub-status-pill">
-          <span className="hub-status-dot" />
-          Available
+          <span className="hub-status-dot" style={{ background: statusColor('online', myAvailability) }} />
+          {statusLabel('online', myAvailability)}
         </div>
       </div>
 
@@ -302,7 +309,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
             {events.length === 0 && <p className="hub-muted">Nothing scheduled for today.</p>}
             <ul className="hub-day-list">
               {events.map((e) => (
-                <EventRow
+                <EventListItem
                   key={e.id}
                   event={e}
                   isOwner={user?.id === e.created_by}
@@ -332,13 +339,14 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
               {(peopleExpanded ? online : online.slice(0, CAP)).map((p) => (
                 <li key={p.id}>
                   <button className="hub-person hub-person-btn" onClick={() => onMessagePerson(p)}>
-                    <span className="hub-dot is-on" />
+                    <span className="hub-dot is-on" style={{ background: statusColor(p.status, p.availability) }} title={statusLabel(p.status, p.availability)} />
                     <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
                       {(p.full_name || '?').charAt(0).toUpperCase()}
                     </span>
                     <span className="hub-person-info">
                       <span className="hub-person-name">{p.full_name || p.email}</span>
                       {p.job_title && <span className="hub-person-role">{p.job_title}</span>}
+                      <span className="hub-person-status">{statusLabel(p.status, p.availability)}</span>
                     </span>
                   </button>
                 </li>
@@ -430,88 +438,6 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
         />
       )}
     </section>
-  );
-}
-
-// One row in "Your Day": shows the event, and if the current user created
-// it, hover-reveals edit/delete controls. Editing turns the row into a
-// small inline form reusing the same fields as creation. attendee_names is
-// defensively defaulted to [] - a past bug (now fixed server-side) briefly
-// returned events without it, which crashed the page; this guard means a
-// similar shape mismatch degrades gracefully instead of crashing again.
-function EventRow({
-  event,
-  isOwner,
-  onUpdated,
-  onDeleted,
-}: {
-  event: Event;
-  isOwner: boolean;
-  onUpdated: (e: Event) => void;
-  onDeleted: (id: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(event.title);
-  const [time, setTime] = useState(formatSAST(event.starts_at));
-  const [venue, setVenue] = useState(event.venue || '');
-  const [busy, setBusy] = useState(false);
-  const attendees = event.attendee_names || [];
-
-  async function save() {
-    setBusy(true);
-    try {
-      const dateStr = event.starts_at.slice(0, 10);
-      const startsAt = `${dateStr}T${time}:00+02:00`;
-      const { event: updated } = await eventsApi.update(event.id, { title: title.trim(), startsAt, venue: venue.trim() });
-      onUpdated(updated);
-      setEditing(false);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!window.confirm(`Delete "${event.title}"?`)) return;
-    await eventsApi.remove(event.id);
-    onDeleted(event.id);
-  }
-
-  if (editing) {
-    return (
-      <li className="hub-day-item hub-day-item-editing">
-        <div className="hub-event-form">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title" />
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-          <input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue" className="hub-event-venue" />
-          <button className="hub-post-cancel" onClick={() => setEditing(false)}>Cancel</button>
-          <button className="hub-post-send" onClick={save} disabled={busy}>{busy ? 'Saving...' : 'Save'}</button>
-        </div>
-      </li>
-    );
-  }
-
-  return (
-    <li className="hub-day-item">
-      <span className="hub-day-time">{formatSAST(event.starts_at)}</span>
-      <div className="hub-day-body">
-        <span className="hub-day-title">{event.title}</span>
-        <span className="hub-day-meta">
-          {event.venue && <span className="hub-day-venue">📍 {event.venue}</span>}
-          {attendees.length > 0 && (
-            <span className="hub-day-attendees">
-              👥 {attendees.slice(0, 3).join(', ')}
-              {attendees.length > 3 ? ` +${attendees.length - 3}` : ''}
-            </span>
-          )}
-        </span>
-      </div>
-      {isOwner && (
-        <div className="hub-day-actions">
-          <button className="hub-day-action" onClick={() => setEditing(true)} title="Edit">✏️</button>
-          <button className="hub-day-action" onClick={remove} title="Delete">🗑️</button>
-        </div>
-      )}
-    </li>
   );
 }
 

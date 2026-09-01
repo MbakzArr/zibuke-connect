@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { eventsApi, type Event } from '../api/resources';
+import { useAuth } from '../context/AuthContext';
+import EventListItem from './EventListItem';
 
 // A simple month-grid calendar for the sidebar. Shows today highlighted and
 // a dot on any day that has at least one real event (from the events API,
 // not mocked). Clicking a day shows that day's events inline below the
 // grid - no navigation, no new page, kept deliberately light.
 export default function MiniCalendar() {
+  const { user } = useAuth();
   const [cursor, setCursor] = useState(() => new Date());
   const [eventDates, setEventDates] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -107,14 +110,20 @@ export default function MiniCalendar() {
           ) : (
             <>
               {selectedEvents.length === 0 && !addingOn && <p className="hub-muted">Nothing scheduled.</p>}
-              {selectedEvents.map((e) => (
-                <div key={e.id} className="mini-cal-event">
-                  <span className="mini-cal-event-time">
-                    {new Intl.DateTimeFormat('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Johannesburg' }).format(new Date(e.starts_at))}
-                  </span>
-                  <span className="mini-cal-event-title">{e.title}</span>
-                </div>
-              ))}
+              <ul className="mini-cal-event-list">
+                {selectedEvents.map((e) => (
+                  <EventListItem
+                    key={e.id}
+                    event={e}
+                    isOwner={user?.id === e.created_by}
+                    compact
+                    onUpdated={(updated) =>
+                      setSelectedEvents((prev) => prev.map((ev) => (ev.id === updated.id ? updated : ev)))
+                    }
+                    onDeleted={(id) => setSelectedEvents((prev) => prev.filter((ev) => ev.id !== id))}
+                  />
+                ))}
+              </ul>
               {addingOn ? (
                 <div className="mini-cal-add-form">
                   <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Event title" />

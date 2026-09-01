@@ -140,15 +140,17 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson }: CompanyHu
             </div>
             <ul className="hub-people">
               {people.map((p) => (
-                <li key={p.id} className="hub-person">
-                  <span className={`hub-dot ${p.status === 'online' ? 'is-on' : ''}`} />
-                  <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
-                    {(p.full_name || '?').charAt(0).toUpperCase()}
-                  </span>
-                  <span className="hub-person-info">
-                    <span className="hub-person-name">{p.full_name || p.email}</span>
-                    {p.job_title && <span className="hub-person-role">{p.job_title}</span>}
-                  </span>
+                <li key={p.id}>
+                  <button className="hub-person hub-person-btn" onClick={() => onMessagePerson(p)}>
+                    <span className={`hub-dot ${p.status === 'online' ? 'is-on' : ''}`} />
+                    <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
+                      {(p.full_name || '?').charAt(0).toUpperCase()}
+                    </span>
+                    <span className="hub-person-info">
+                      <span className="hub-person-name">{p.full_name || p.email}</span>
+                      {p.job_title && <span className="hub-person-role">{p.job_title}</span>}
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>

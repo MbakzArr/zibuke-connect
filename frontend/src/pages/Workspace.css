@@ -596,3 +596,10 @@
 .row:hover .msg-reactions .reaction-add-wrap { opacity: 1; }
 /* Align my own message reactions to the right, like the bubbles. */
 .row-mine .msg-reactions .reactions { justify-content: flex-end; }
+
+/* Clickable people in the online list */
+.hub-person-btn {
+  width: 100%; border: none; background: transparent; text-align: left;
+  padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.hub-person-btn:hover { background: var(--surface-2); }

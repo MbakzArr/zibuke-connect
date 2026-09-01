@@ -15,7 +15,10 @@ interface LoginInput {
 }
 
 export async function registerUser(input: RegisterInput) {
-  const { organizationId, email, password, fullName } = input;
+  const { organizationId, password, fullName } = input;
+  // Emails are case-insensitive: store and compare lowercased so
+  // "Arehone@..." and "arehone@..." are treated as the same account.
+  const email = input.email.trim().toLowerCase();
 
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) {
@@ -53,7 +56,10 @@ export async function registerUser(input: RegisterInput) {
 }
 
 export async function loginUser(input: LoginInput) {
-  const { email, password } = input;
+  const { password } = input;
+  // Match the same lowercasing used at registration, so login is
+  // case-insensitive on the email.
+  const email = input.email.trim().toLowerCase();
 
   const result = await pool.query(
     'SELECT id, organization_id, email, password_hash, role FROM users WHERE email = $1',

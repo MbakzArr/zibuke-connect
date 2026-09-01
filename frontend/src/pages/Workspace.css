@@ -668,3 +668,14 @@
   padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer;
 }
 .hub-person-btn:hover { background: var(--surface-2); }
+
+/* ---- Mobile back button in channel header ---- */
+.chan-back-btn {
+  display: none; /* hidden on desktop, sidebar handles navigation there */
+  border: none; background: transparent; font-size: 20px; color: var(--ink-soft);
+  width: 32px; height: 32px; border-radius: 8px; margin-right: 4px; flex-shrink: 0;
+}
+.chan-back-btn:hover { background: var(--surface-2); }
+@media (max-width: 720px) {
+  .chan-back-btn { display: inline-flex; align-items: center; justify-content: center; }
+}

@@ -81,10 +81,41 @@ export default function Workspace() {
     };
   }, [socket]);
 
+  // Push a browser history entry for the current view, so the phone's back
+  // gesture/button navigates WITHIN the app (channel -> hub) before it ever
+  // leaves the site. Each nav function calls this after updating state.
+  function pushHistory(entry: { view: 'hub' } | { view: 'channel'; channel: Channel; dmTitle?: string }) {
+    window.history.pushState(entry, '', entry.view === 'hub' ? '#hub' : `#${entry.channel.id}`);
+  }
+
+  // Restore the view when the user presses back/forward. If there's no
+  // state (e.g. they've gone back past our first entry), fall back to hub.
+  useEffect(() => {
+    function onPopState(e: PopStateEvent) {
+      const state = e.state as
+        | { view: 'hub' }
+        | { view: 'channel'; channel: Channel; dmTitle?: string }
+        | null;
+      if (!state || state.view === 'hub') {
+        setView('hub');
+        setActiveChannel(null);
+        setDmTitle(undefined);
+      } else {
+        setActiveChannel(state.channel);
+        setDmTitle(state.dmTitle);
+        setView('channel');
+      }
+    }
+    window.history.replaceState({ view: 'hub' }, '', '#hub');
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   function openChannel(channel: Channel) {
     setActiveChannel(channel);
     setDmTitle(undefined);
     setView('channel');
+    pushHistory({ view: 'channel', channel });
   }
 
   function openHub() {
@@ -92,21 +123,24 @@ export default function Workspace() {
     setActiveChannel(null);
     setDmTitle(undefined);
     setJumpToId(undefined);
+    pushHistory({ view: 'hub' });
   }
 
   // Open a DM by its existing channel id (from the sidebar list).
   function openDmByChannel(channelId: string, personName: string) {
     clearDmUnread(channelId);
-    setActiveChannel({
+    const channel: Channel = {
       id: channelId,
       name: personName,
       department_id: null,
       is_private: true,
       created_by: '',
       created_at: '',
-    });
+    };
+    setActiveChannel(channel);
     setDmTitle(personName);
     setView('channel');
+    pushHistory({ view: 'channel', channel, dmTitle: personName });
   }
 
   // Open a DM with a person (from search results). Uses the DM endpoint,
@@ -128,6 +162,7 @@ export default function Workspace() {
     setDmTitle(personName);
     setView('channel');
     setDmRefreshKey((k) => k + 1); // refresh the sidebar DM list
+    pushHistory({ view: 'channel', channel, dmTitle: personName });
   }
 
   // Called when a notification is clicked. We only have the channel id, so
@@ -318,6 +353,7 @@ export default function Workspace() {
                   department_name: null,
                 })
               }
+              onBack={openHub}
             />
           ) : null}
         </div>

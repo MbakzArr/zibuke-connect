@@ -12,18 +12,19 @@ interface ChannelViewProps {
   dmTitle?: string; // when set, this is a DM and we show the person's name
   jumpToId?: string; // when set, scroll to and flash this message after load
   onOpenDm?: (userId: string, name: string) => void; // open a DM (from a profile)
+  onBack?: () => void; // mobile: return to the Company Hub
 }
 
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm, onBack }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgReactions, setMsgReactions] = useState<ReactionsMap>({});
   const [draft, setDraft] = useState('');
-  const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [typingName, setTypingName] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
@@ -76,9 +77,9 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: Ch
         setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
       }
     }
-    function onTyping(t: { channelId: string; userId: string; typing: boolean }) {
+    function onTyping(t: { channelId: string; userId: string; name?: string; typing: boolean }) {
       if (t.channelId === channel.id && t.userId !== user?.id) {
-        setTypingUser(t.typing ? t.userId : null);
+        setTypingName(t.typing ? (t.name || 'Someone') : null);
       }
     }
 
@@ -247,6 +248,11 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: Ch
   return (
     <section className="chan">
       <header className="chan-head">
+        {onBack && (
+          <button className="chan-back-btn" onClick={onBack} aria-label="Back to Company Hub">
+            ←
+          </button>
+        )}
         <h2 className="chan-title">
           {dmTitle ? (
             <>
@@ -387,7 +393,7 @@ export default function ChannelView({ channel, dmTitle, jumpToId, onOpenDm }: Ch
       </div>
 
       <div className="chan-typing">
-        {typingUser ? 'Someone is typing...' : '\u00a0'}
+        {typingName ? `${typingName} is typing...` : '\u00a0'}
       </div>
 
       <div className="chan-composer">

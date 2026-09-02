@@ -30,9 +30,13 @@ async function getUserName(userId: string): Promise<string> {
 //   - typing indicators are broadcast but never stored
 //   - presence is updated on connect/disconnect and broadcast org-wide
 
-export function attachSocketServer(httpServer: http.Server) {
+export function attachSocketServer(httpServer: http.Server, allowedOrigins: string[]) {
   const io = new Server(httpServer, {
-    cors: { origin: '*' }, // tighten to the frontend origin in production
+    // Same allow-list as the REST API's CORS config, passed in from
+    // index.ts rather than re-read here, so there's exactly one place
+    // that decides which origins are trusted, not two that could drift
+    // out of sync with each other.
+    cors: { origin: allowedOrigins },
   });
 
   io.use(socketAuth);

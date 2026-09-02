@@ -25,12 +25,33 @@ dotenv.config();
 
 const app = express();
 
+// Supports multiple frontends talking to the same backend at once - e.g.
+// the Netlify practice deployment and a Cloudflare deployment both hitting
+// this same Render backend simultaneously, which is exactly the situation
+// during the Cloudflare migration: FRONTEND_ORIGIN can be a single URL or
+// a comma-separated list ("https://a.com,https://b.com"), and every origin
+// in that list is allowed - nothing currently pointed at this backend loses
+// access when a new frontend is added, they just get appended to the list.
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(helmet());
-// Restrict CORS to the frontend origin rather than allowing any site. The
-// origin is configurable so the deployed frontend URL can be set in prod.
+// Restrict CORS to the known frontend origin(s) rather than allowing any
+// site. The cors package's function form lets us check against the list
+// above instead of a single hardcoded string.
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+    origin(origin, callback) {
+      // No Origin header at all (curl, server-to-server, same-origin) -
+      // let it through; there's nothing to check against.
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} is not allowed`));
+      }
+    },
   })
 );
 // Cap request bodies so a single huge payload can't exhaust memory.
@@ -65,7 +86,7 @@ app.get('/api/v1/me', requireAuth, (req, res) => {
 
 // Express and Socket.io share one HTTP server, so both run on the same port.
 const httpServer = http.createServer(app);
-attachSocketServer(httpServer);
+attachSocketServer(httpServer, allowedOrigins);
 
 const PORT = process.env.PORT || 4000;
 

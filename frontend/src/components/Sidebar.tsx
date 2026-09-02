@@ -206,7 +206,7 @@ export default function Sidebar({
         </ul>
       </div>
 
-      <div className="side-section">
+      <div className="side-section side-section-calendar">
         <button className="side-section-head side-section-toggle" onClick={() => setCalendarOpen((v) => !v)}>
           <span>📅 Calendar</span>
           <span className="side-toggle-chevron">{calendarOpen ? '▾' : '▸'}</span>

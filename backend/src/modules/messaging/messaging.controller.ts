@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getMessages, editMessage, deleteMessage, searchMessages, getRecentConversations } from './messaging.service';
+import { getMessages, editMessage, deleteMessage, restoreMessage, searchMessages, getRecentConversations } from './messaging.service';
 import { getChannel, isMember } from '../channels/channels.service';
 import { emitToChannel } from './realtime';
 
@@ -80,6 +80,32 @@ export async function remove(req: Request, res: Response) {
     }
     console.error('Delete message error:', err);
     return res.status(500).json({ error: 'Could not delete message' });
+  }
+}
+
+export async function restore(req: Request, res: Response) {
+  try {
+    const message = await restoreMessage(req.params.id, req.user!.userId);
+    // Broadcast the restore the same way as any other update, so it comes
+    // back for everyone viewing the channel, not just the person who
+    // clicked Undo.
+    emitToChannel(message.channel_id, 'message:updated', message);
+    return res.json({ message });
+  } catch (err: any) {
+    if (err.message === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    if (err.message === 'NOT_AUTHOR') {
+      return res.status(403).json({ error: 'You can only restore your own messages' });
+    }
+    if (err.message === 'NOT_DELETED') {
+      return res.status(400).json({ error: 'This message was not deleted' });
+    }
+    if (err.message === 'UNDO_EXPIRED') {
+      return res.status(400).json({ error: 'Too late to undo this delete' });
+    }
+    console.error('Restore message error:', err);
+    return res.status(500).json({ error: 'Could not restore message' });
   }
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi, type AdminUser } from '../api/resources';
 import { colorFor } from '../util/avatarColor';
+import { useToast } from '../context/ToastContext';
 
 const ROLE_LABEL: Record<string, string> = {
   admin: 'Admin',
@@ -17,6 +18,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   async function load() {
     setLoading(true);
@@ -42,8 +44,9 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     try {
       await adminApi.removeEmployee(u.id);
       await load();
+      showToast(`${u.full_name || u.email} removed.`, { type: 'success' });
     } catch (err: any) {
-      alert(err?.message || 'Could not remove employee.');
+      showToast(err?.message || 'Could not remove employee.', { type: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -54,6 +57,9 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     try {
       await adminApi.restoreEmployee(u.id);
       await load();
+      showToast(`${u.full_name || u.email} restored.`, { type: 'success' });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not restore employee.', { type: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -64,8 +70,9 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     try {
       await adminApi.setRole(u.id, role);
       await load();
+      showToast(`Role updated.`, { type: 'success' });
     } catch (err: any) {
-      alert(err?.message || 'Could not update role.');
+      showToast(err?.message || 'Could not update role.', { type: 'error' });
     } finally {
       setBusyId(null);
     }
@@ -148,9 +155,17 @@ function AddEmployeeForm({ onAdded }: { onAdded: () => void }) {
   const [role, setRole] = useState('employee');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   async function submit() {
-    if (!email.trim() || !password.trim() || !fullName.trim()) return;
+    if (!email.trim() || !password.trim() || !fullName.trim()) {
+      setError('Name, email and password are all required.');
+      return;
+    }
+    if (password.trim().length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -161,6 +176,7 @@ function AddEmployeeForm({ onAdded }: { onAdded: () => void }) {
         jobTitle: jobTitle.trim() || undefined,
         role,
       });
+      showToast(`${fullName.trim()} added.`, { type: 'success' });
       onAdded();
     } catch (err: any) {
       setError(err?.message || 'Could not add employee.');

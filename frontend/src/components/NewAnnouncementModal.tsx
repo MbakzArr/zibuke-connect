@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { announcementsApi, type Announcement } from '../api/resources';
+import { useToast } from '../context/ToastContext';
 
 interface NewAnnouncementModalProps {
   onClose: () => void;
@@ -14,6 +15,7 @@ export default function NewAnnouncementModal({ onClose, onPosted }: NewAnnouncem
   const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   async function post() {
     if (!title.trim() || !content.trim()) return;
@@ -22,10 +24,11 @@ export default function NewAnnouncementModal({ onClose, onPosted }: NewAnnouncem
     try {
       const { announcement } = await announcementsApi.create(title.trim(), content.trim());
       onPosted(announcement);
+      showToast('Announcement posted.', { type: 'success' });
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Could not post the announcement. Try again.');
+      setError(err?.message || 'Could not post the announcement. Try again.');
     } finally {
       setBusy(false);
     }

@@ -3,6 +3,7 @@ import { channelsApi, messagesApi, reactionsApi, directoryApi, type Channel, typ
 import { statusColor, statusLabel } from '../util/status';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import MembersModal from './MembersModal';
 import ProfileModal from './ProfileModal';
@@ -23,6 +24,7 @@ interface ChannelViewProps {
 export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOpenDm, onBack }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgReactions, setMsgReactions] = useState<ReactionsMap>({});
   const [draft, setDraft] = useState('');
@@ -284,20 +286,34 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
       const { message } = await messagesApi.edit(id, content);
       // Update locally right away; the socket broadcast also updates others.
       setMessages((prev) => prev.map((m) => (m.id === id ? message : m)));
-    } catch (err) {
-      // Leave the edit box open so the user can retry.
-      console.error(err);
+      setEditingId(null);
+      setEditDraft('');
+    } catch (err: any) {
+      // Leave the edit box open so the user can retry, and say why it failed.
+      showToast(err?.message || 'Could not save that edit. Try again.', { type: 'error' });
     }
-    setEditingId(null);
-    setEditDraft('');
   }
 
   async function remove(id: string) {
     try {
       const { message } = await messagesApi.remove(id);
       setMessages((prev) => prev.map((m) => (m.id === id ? message : m)));
-    } catch (err) {
-      console.error(err);
+      showToast('Message deleted', {
+        type: 'success',
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              const { message: restored } = await messagesApi.restore(id);
+              setMessages((prev) => prev.map((m) => (m.id === id ? restored : m)));
+            } catch (err: any) {
+              showToast(err?.message || 'Could not undo that delete.', { type: 'error' });
+            }
+          },
+        },
+      });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not delete that message.', { type: 'error' });
     }
   }
 

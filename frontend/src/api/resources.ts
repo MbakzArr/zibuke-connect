@@ -208,6 +208,8 @@ export const messagesApi = {
     }),
   remove: (id: string) =>
     apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, { method: 'DELETE' }),
+  restore: (id: string) =>
+    apiRequest<{ message: Message }>(`/api/v1/messages/${id}/restore`, { method: 'POST' }),
   recent: () => apiRequest<{ conversations: RecentConversation[] }>('/api/v1/messages/recent'),
   search: (q: string, channelId?: string) => {
     const c = channelId ? `&channelId=${channelId}` : '';

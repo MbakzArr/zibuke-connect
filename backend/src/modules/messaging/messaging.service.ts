@@ -113,11 +113,14 @@ export async function deleteMessage(messageId: string, userId: string) {
     throw new Error('NOT_AUTHOR');
   }
 
-  // Soft delete: keep the row, stamp deleted_at, blank the content. The row
-  // stays so message history stays consistent and an audit trail exists.
+  // Soft delete: keep the row AND the real content, just stamp deleted_at.
+  // The content stays in the database (masked out of every response by
+  // maskIfDeleted below) specifically so a delete can be undone - blanking
+  // it here would make "undo" impossible since the original text would
+  // already be gone.
   const result = await pool.query(
     `UPDATE messages
-     SET deleted_at = now(), content = ''
+     SET deleted_at = now()
      WHERE id = $1 AND user_id = $2
      RETURNING id, channel_id, user_id, content, created_at, edited_at, deleted_at`,
     [messageId, userId]
@@ -125,6 +128,43 @@ export async function deleteMessage(messageId: string, userId: string) {
   const message = maskIfDeleted(result.rows[0]);
   // Keep the sender's name on the deleted stub so history stays consistent
   // (author still shown above the "[message deleted]" placeholder).
+  const sender = await pool.query(
+    'SELECT full_name FROM employee_profiles WHERE user_id = $1',
+    [message.user_id]
+  );
+  message.sender_name = sender.rows[0]?.full_name || null;
+  return message;
+}
+
+// Undo a delete: only within a short window, and only the original
+// author. Anyone could otherwise "undo" a delete on an old message days
+// later, which isn't what Undo means here - it's a mistake-correction
+// window, not a permanent restore tool.
+const UNDO_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
+export async function restoreMessage(messageId: string, userId: string) {
+  const existing = await getMessageById(messageId);
+  if (!existing) {
+    throw new Error('NOT_FOUND');
+  }
+  if (existing.user_id !== userId) {
+    throw new Error('NOT_AUTHOR');
+  }
+  if (!existing.deleted_at) {
+    throw new Error('NOT_DELETED');
+  }
+  if (Date.now() - new Date(existing.deleted_at).getTime() > UNDO_WINDOW_MS) {
+    throw new Error('UNDO_EXPIRED');
+  }
+
+  const result = await pool.query(
+    `UPDATE messages
+     SET deleted_at = NULL
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, channel_id, user_id, content, created_at, edited_at, deleted_at`,
+    [messageId, userId]
+  );
+  const message = result.rows[0];
   const sender = await pool.query(
     'SELECT full_name FROM employee_profiles WHERE user_id = $1',
     [message.user_id]

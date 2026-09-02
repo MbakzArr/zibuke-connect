@@ -13,6 +13,7 @@ import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
 import NewAnnouncementModal from '../components/NewAnnouncementModal';
 import AdminPanel from '../components/AdminPanel';
+import { useToast } from '../context/ToastContext';
 import ProfileModal from '../components/ProfileModal';
 import EventDetailModal from '../components/EventDetailModal';
 import { channelsApi, announcementsApi, directoryApi, usersApi, type Channel, type Person, type Announcement } from '../api/resources';
@@ -24,6 +25,7 @@ export default function Workspace() {
   const { user, logout } = useAuth();
   const socket = useSocket();
   const { clearDmUnread } = useNotifications();
+  const { showToast } = useToast();
   const [connected, setConnected] = useState(false);
   const [view, setView] = useState<'hub' | 'channel'>('hub');
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
@@ -158,14 +160,15 @@ export default function Workspace() {
     }
     try {
       await channelsApi.leave(channelId);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      showToast(err?.message || 'Could not delete that conversation.', { type: 'error' });
       return;
     }
     if (activeChannel?.id === channelId) {
       openHub();
     }
     setDmRefreshKey((k) => k + 1);
+    showToast(`Conversation with ${personName} deleted.`, { type: 'success' });
   }
 
   // Open a DM by its existing channel id (from the sidebar list).

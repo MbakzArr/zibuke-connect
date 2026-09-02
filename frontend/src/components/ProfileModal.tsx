@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { directoryApi, type FullProfile } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import { statusColor, statusLabel } from '../util/status';
 
@@ -18,6 +19,7 @@ interface ProfileModalProps {
 // called it, which is why these fields sat empty for everyone.
 export default function ProfileModal({ userId, onClose, onMessage }: ProfileModalProps) {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ jobTitle: '', phone: '', address: '', linkedinUrl: '', timezone: '' });
@@ -49,6 +51,9 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
       });
       setProfile((prev) => (prev ? { ...prev, ...updated } : prev));
       setEditing(false);
+      showToast('Profile updated.', { type: 'success' });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not save your profile.', { type: 'error' });
     } finally {
       setSaving(false);
     }

@@ -64,6 +64,17 @@
   font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--ink-faint);
 }
+/* Space between sections (Channels / Direct Messages / Calendar) - without
+   this, sections sit flush against each other and a DM row and the
+   Calendar header end up looking like one continuous block. */
+.side-section { margin-bottom: var(--sp-5); }
+.side-section:last-child { margin-bottom: 0; }
+/* Calendar specifically gets its own top border and extra breathing room,
+   on top of the standard section gap - it's structurally different (a
+   collapsible tool, not a nav list) and reads better set apart. */
+.side-section-calendar {
+  padding-top: var(--sp-4); border-top: 1px solid rgba(79, 70, 229, 0.16);
+}
 .side-section-toggle {
   width: 100%; border: none; background: transparent; cursor: pointer;
 }

@@ -2,6 +2,7 @@ import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Workspace from './pages/Workspace';
 import ErrorBoundary from './components/ErrorBoundary';
+import ToastContainer from './components/ToastContainer';
 
 // Top-level gate: while we check the stored token, show nothing; then either
 // the login screen or the workspace depending on whether we have a user.
@@ -12,5 +13,10 @@ export default function App() {
     return <div style={{ padding: 40, color: '#8a8aa3' }}>Loading...</div>;
   }
 
-  return <ErrorBoundary>{user ? <Workspace /> : <Login />}</ErrorBoundary>;
+  return (
+    <ErrorBoundary>
+      {user ? <Workspace /> : <Login />}
+      <ToastContainer />
+    </ErrorBoundary>
+  );
 }

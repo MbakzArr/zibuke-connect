@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { reactionsApi, type ReactionCounts } from '../api/resources';
 import { useSocket } from '../context/SocketContext';
 
@@ -19,6 +19,10 @@ interface ReactionsProps {
 export default function Reactions({ targetType, targetId, initial }: ReactionsProps) {
   const [counts, setCounts] = useState<ReactionCounts>(initial || {});
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Which side/edge the picker opens toward, worked out from the trigger
+  // button's actual position so it never gets clipped by the viewport.
+  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
+  const wrapRef = useRef<HTMLDivElement>(null);
   const socket = useSocket();
 
   // The `initial` counts often arrive AFTER this component first mounts (the
@@ -56,6 +60,36 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
 
   // Which emoji (if any) this user has currently reacted with.
   const myEmoji = EMOJI.find((e) => counts[e]?.reacted) || null;
+
+  // Work out whether the palette fits where it would normally open (left
+  // edge, opening upward). Near the right edge of the screen it would run
+  // off, so flip to hang from the right instead; near the top it would run
+  // off upward, so drop it below the button instead. Approximate sizes are
+  // fine here, we only need to know which side has room.
+  function openPicker() {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    const style: React.CSSProperties = {};
+    if (rect) {
+      const pickerWidth = EMOJI.length * 38 + 8;
+      const margin = 8;
+      if (rect.left + pickerWidth > window.innerWidth - margin) {
+        style.left = 'auto';
+        style.right = 0;
+      } else {
+        style.left = 0;
+        style.right = 'auto';
+      }
+      if (rect.top - 48 < margin) {
+        style.bottom = 'auto';
+        style.top = 'calc(100% + 6px)';
+      } else {
+        style.top = 'auto';
+        style.bottom = 'calc(100% + 6px)';
+      }
+    }
+    setPickerStyle(style);
+    setPickerOpen((o) => !o);
+  }
 
   async function react(emoji: string) {
     setPickerOpen(false);
@@ -114,14 +148,14 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
 
       {/* Only offer the palette if the user hasn't reacted yet. */}
       {!myEmoji && (
-        <div className="reaction-add-wrap">
-          <button className="reaction-add" onClick={() => setPickerOpen((o) => !o)} title="Add a reaction">
+        <div className="reaction-add-wrap" ref={wrapRef}>
+          <button className="reaction-add" onClick={openPicker} title="Add a reaction">
             {active.length === 0 ? '☺ React' : '+'}
           </button>
           {pickerOpen && (
             <>
               <div className="reaction-picker-overlay" onClick={() => setPickerOpen(false)} />
-              <div className="reaction-picker">
+              <div className="reaction-picker" style={pickerStyle}>
                 {EMOJI.map((emoji) => (
                   <button key={emoji} className="reaction-pick" onClick={() => react(emoji)}>
                     {emoji}

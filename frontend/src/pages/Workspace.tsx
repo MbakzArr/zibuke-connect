@@ -11,6 +11,7 @@ import BrowseChannels from '../components/BrowseChannels';
 import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
+import NewAnnouncementModal from '../components/NewAnnouncementModal';
 import ProfileModal from '../components/ProfileModal';
 import EventDetailModal from '../components/EventDetailModal';
 import { channelsApi, announcementsApi, directoryApi, usersApi, type Channel, type Person, type Announcement } from '../api/resources';
@@ -75,7 +76,13 @@ export default function Workspace() {
   const [showNewDm, setShowNewDm] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
+  // Bumped after posting an announcement from the sidebar quick action, so
+  // the hub (if already mounted) remounts and picks it up on next visit
+  // instead of showing a stale list until a manual refresh.
+  const [hubKey, setHubKey] = useState(0);
   const [dmRefreshKey, setDmRefreshKey] = useState(0);
+  const isAdmin = user?.role === 'admin' || user?.role === 'department_admin';
 
   useEffect(() => {
     if (!socket) return;
@@ -370,6 +377,8 @@ export default function Workspace() {
               onNewDm={() => setShowNewDm(true)}
               onBrowse={() => setShowBrowse(true)}
               dmRefreshKey={dmRefreshKey}
+              showAnnouncementAction={isAdmin}
+              onNewAnnouncement={() => setShowNewAnnouncement(true)}
             />
             <div className="ws-resize-handle" onMouseDown={startResize} title="Drag to resize" />
           </div>
@@ -377,6 +386,7 @@ export default function Workspace() {
         <div className="ws-panel">
           {view === 'hub' ? (
             <CompanyHub
+              key={hubKey}
               onOpenChannel={openChannel}
               onMessagePerson={openDmWithPerson}
               onOpenConversation={navigateToChannel}
@@ -443,6 +453,12 @@ export default function Workspace() {
             }
             navigateToChannel(channelId);
           }}
+        />
+      )}
+      {showNewAnnouncement && (
+        <NewAnnouncementModal
+          onClose={() => setShowNewAnnouncement(false)}
+          onPosted={() => setHubKey((k) => k + 1)}
         />
       )}
       {openAnnouncement && (

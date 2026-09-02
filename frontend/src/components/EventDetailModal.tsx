@@ -9,7 +9,7 @@ export default function EventDetailModal({
   onClose: () => void;
 }) {
   const timeStr = new Intl.DateTimeFormat('en-ZA', {
-    weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Johannesburg',
+    weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Johannesburg',
   }).format(new Date(event.startsAt));
 
   return (

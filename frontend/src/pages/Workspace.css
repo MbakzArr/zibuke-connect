@@ -81,6 +81,25 @@
 }
 .side-list { list-style: none; margin: 0; padding: 0; }
 .side-empty { padding: 8px 10px; font-size: 13px; color: var(--ink-faint); }
+/* A faint divider between channel/DM rows so adjacent items read as
+   separate click targets instead of one dense block - easy to fat-finger
+   the wrong one otherwise. No line under the last row in each list. */
+.side-list-item:not(:last-child) { border-bottom: 1px solid var(--surface-3); }
+
+/* ---- Quick actions strip: visually boxed off from the nav lists above
+   and below it, so it never gets mistaken for a channel/DM row. ---- */
+.side-quick-actions {
+  margin: 0 0 var(--sp-4); padding: var(--sp-2);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.side-quick-action {
+  display: flex; align-items: center; gap: var(--sp-2);
+  width: 100%; padding: 7px 8px; border: none; background: transparent;
+  border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--indigo-600);
+  text-align: left;
+}
+.side-quick-action:hover { background: var(--indigo-50); }
+.side-quick-action-icon { font-size: 14px; }
 
 /* ---- Channel view ---- */
 .chan { display: flex; flex-direction: column; height: 100%; }
@@ -384,7 +403,7 @@
 .bell-overlay { position: fixed; inset: 0; z-index: 40; }
 .bell-panel {
   position: absolute; top: 42px; right: 0; z-index: 41;
-  width: 300px; background: var(--surface); border: 1px solid var(--border);
+  width: 300px; max-width: calc(100vw - 16px); background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: 0 16px 40px rgba(26,26,46,0.16);
   overflow: hidden;
 }
@@ -393,7 +412,7 @@
   font-weight: 600; font-size: 14px;
 }
 .bell-empty { padding: var(--sp-5); text-align: center; color: var(--ink-faint); font-size: 14px; }
-.bell-list { list-style: none; margin: 0; padding: 0; max-height: 380px; overflow-y: auto; }
+.bell-list { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
 .bell-item {
   display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3);
   width: 100%; padding: 10px var(--sp-4); border: none; background: transparent;
@@ -549,7 +568,7 @@
 .chan-search-btn:hover { background: var(--surface-2); }
 .chan-search-panel {
   position: absolute; top: 40px; right: 0; z-index: 30;
-  width: 320px; background: var(--surface); border: 1px solid var(--border);
+  width: 320px; max-width: calc(100vw - 16px); background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: 0 16px 40px rgba(26,26,46,0.16);
   overflow: hidden;
 }
@@ -612,9 +631,12 @@
 }
 .reaction-add:hover { background: var(--surface-2); color: var(--ink-soft); border-color: var(--ink-faint); }
 .reaction-picker-overlay { position: fixed; inset: 0; z-index: 40; }
+/* Default (JS overrides left/right/top/bottom inline per-instance so the
+   palette never runs off the viewport edge - see Reactions.tsx). */
 .reaction-picker {
   position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 41;
   display: flex; gap: 2px; padding: 4px;
+  max-width: calc(100vw - 16px);
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: 0 10px 30px rgba(26,26,46,0.16);
 }
@@ -668,6 +690,16 @@
 .profile-fields dt { color: var(--ink-faint); margin: 0; }
 .profile-fields dd { margin: 0; color: var(--ink); text-align: right; }
 .profile-fields a { color: var(--indigo-600); }
+.profile-edit-form { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.profile-edit-form label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--ink-faint);
+}
+.profile-edit-form input {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 14px; color: var(--ink); font-weight: 400;
+}
+.profile-edit-form input:focus { border-color: var(--indigo-600); outline: none; }
 .profile-msg-btn {
   width: 100%; padding: 9px; border: none; background: var(--indigo-600); color: #fff;
   border-radius: var(--radius-sm); font-size: 14px; font-weight: 600;
@@ -710,7 +742,7 @@
 .ws-account-overlay { position: fixed; inset: 0; z-index: 60; }
 .ws-account-menu {
   position: absolute; top: 44px; right: 0; z-index: 61;
-  width: 220px; background: var(--surface); border: 1px solid var(--border);
+  width: 220px; max-width: calc(100vw - 16px); background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: 0 16px 40px rgba(26,26,46,0.18);
   overflow: hidden;
 }
@@ -917,6 +949,21 @@
 
 @media (max-width: 720px) {
   .hub-event-venue { width: 100px; }
+  /* The event form (title, time, venue, invite, cancel, save) is a fixed-
+     width row that simply doesn't fit a phone screen - wrap it and let each
+     input take the full row instead of running off the right edge. */
+  .hub-event-form { flex-wrap: wrap; }
+  .hub-event-form input[type="text"], .hub-event-form input:not([type]),
+  .hub-event-form .hub-event-venue {
+    width: 100%;
+  }
+  .hub-event-form-wrap { width: 100%; }
+  /* A fixed 220px popover pinned to the wrap's right edge is fine once the
+     wrap itself spans the full (padded) card width above - but clamp the
+     width too, so it can never exceed the viewport on very narrow phones. */
+  .hub-attendee-picker {
+    width: auto; max-width: calc(100vw - 32px);
+  }
 }
 
 /* ---- Global error boundary fallback ---- */
@@ -957,9 +1004,20 @@
 .directory-list { list-style: none; margin: 0; padding: var(--sp-2); max-height: 60vh; overflow-y: auto; }
 .directory-row { display: flex; align-items: center; gap: var(--sp-3); padding: 10px 8px; border-radius: var(--radius-sm); }
 .directory-row:hover { background: var(--surface-2); }
-.directory-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.directory-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
 .directory-name { font-size: 14px; font-weight: 600; color: var(--ink); }
 .directory-role { font-size: 12px; color: var(--ink-faint); }
+.directory-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.directory-jobtitle { font-size: 12px; color: var(--ink-soft); }
+.directory-dept {
+  font-size: 11px; color: var(--indigo-700); background: var(--indigo-50);
+  padding: 1px 7px; border-radius: 10px;
+}
+.directory-availability { font-size: 11px; font-weight: 600; margin-top: 1px; }
+.directory-availability--available { color: var(--online); }
+.directory-availability--busy { color: var(--danger); }
+.directory-availability--away { color: var(--away); }
+.directory-availability--offline { color: var(--ink-faint); }
 .directory-msg {
   padding: 5px 14px; border: 1px solid var(--indigo-600); background: var(--surface);
   color: var(--indigo-600); border-radius: 14px; font-size: 12px; font-weight: 600; flex-shrink: 0;
@@ -1002,6 +1060,8 @@
   border: none; background: transparent; padding-right: 44px; /* room for hover actions */
 }
 .evt-item-main:hover { background: var(--surface-2); border-radius: var(--radius-sm); }
+.evt-time-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.evt-date { font-size: 10px; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; }
 .evt-time {
   font-size: 13px; font-weight: 700; color: var(--indigo-700);
   background: var(--indigo-50); padding: 2px 8px; border-radius: 10px; flex-shrink: 0;
@@ -1027,6 +1087,7 @@
 
 /* Compact variant for the narrow sidebar calendar panel */
 .evt-item-compact .evt-time { font-size: 11px; padding: 1px 6px; }
+.evt-item-compact .evt-date { font-size: 9px; }
 .evt-item-compact .evt-title { font-size: 12px; }
 .evt-item-compact .evt-main { padding-right: 36px; }
 .evt-item-compact .evt-expanded { margin-left: 0; }

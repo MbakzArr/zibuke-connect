@@ -7,6 +7,15 @@ function formatSAST(iso: string): string {
   }).format(new Date(iso));
 }
 
+// "17 Jul" - shown alongside the time so an event never reads as
+// date-less, whether it's today's or one picked from another day on the
+// sidebar calendar.
+function formatSASTDate(iso: string): string {
+  return new Intl.DateTimeFormat('en-ZA', {
+    day: 'numeric', month: 'short', timeZone: 'Africa/Johannesburg',
+  }).format(new Date(iso));
+}
+
 // One event, used in both "Your Day" (Company Hub) and the sidebar
 // calendar's day panel - same component, same buttons, everywhere an event
 // appears. Clicking the row expands full details (venue + attendees) in
@@ -73,7 +82,10 @@ export default function EventListItem({
   return (
     <li className={itemClass}>
       <button className="evt-item-main" onClick={() => setExpanded((v) => !v)}>
-        <span className="evt-time">{formatSAST(event.starts_at)}</span>
+        <span className="evt-time-wrap">
+          <span className="evt-date">{formatSASTDate(event.starts_at)}</span>
+          <span className="evt-time">{formatSAST(event.starts_at)}</span>
+        </span>
         <span className="evt-body">
           <span className="evt-title">{event.title}</span>
           {!expanded && (event.venue || attendees.length > 0) && (

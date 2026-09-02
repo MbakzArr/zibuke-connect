@@ -119,9 +119,14 @@ export async function listEventsForDate(organizationId: string, date?: string) {
 
 // Which dates in a given month (SAST) have at least one event - just the
 // dates, for marking dots on a calendar widget without fetching every event.
+// Cast to text with TO_CHAR here, not just ::date - the pg driver parses a
+// bare DATE column into a JS Date object, which then serializes to a full
+// ISO timestamp ("2026-09-17T00:00:00.000Z") instead of "2026-09-17". The
+// frontend compares against a plain "YYYY-MM-DD" string, so that mismatch
+// silently meant no dot ever matched and the calendar looked empty.
 export async function listEventDatesForMonth(organizationId: string, year: number, month: number) {
   const result = await pool.query(
-    `SELECT DISTINCT (starts_at AT TIME ZONE '${SAST}')::date AS event_date
+    `SELECT DISTINCT TO_CHAR(starts_at AT TIME ZONE '${SAST}', 'YYYY-MM-DD') AS event_date
      FROM events
      WHERE organization_id = $1
        AND EXTRACT(YEAR FROM starts_at AT TIME ZONE '${SAST}') = $2

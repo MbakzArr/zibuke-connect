@@ -13,6 +13,10 @@ interface SidebarProps {
   onBrowse: () => void;
   // bumped by the parent when a new DM is opened, so the list refreshes
   dmRefreshKey: number;
+  // Quick actions, kept in their own section, separated from navigation so
+  // a stray tap on the channel list never triggers one by accident.
+  onNewAnnouncement?: () => void;
+  showAnnouncementAction?: boolean;
 }
 
 // Left rail: Company Hub, the channel list, and a SEPARATE Direct Messages
@@ -25,6 +29,8 @@ export default function Sidebar({
   onNewDm,
   onBrowse,
   dmRefreshKey,
+  onNewAnnouncement,
+  showAnnouncementAction,
 }: SidebarProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [dms, setDms] = useState<Dm[]>([]);
@@ -96,6 +102,18 @@ export default function Sidebar({
         Company Hub
       </button>
 
+      {/* Quick actions live in their own boxed-off strip, deliberately set
+          apart from the navigation lists below, so they're never mistaken
+          for a channel/DM row and never fat-finger-triggered by a scroll. */}
+      {showAnnouncementAction && onNewAnnouncement && (
+        <div className="side-quick-actions">
+          <button className="side-quick-action" onClick={onNewAnnouncement}>
+            <span className="side-quick-action-icon">📢</span>
+            New announcement
+          </button>
+        </div>
+      )}
+
       <div className="side-section">
         <div className="side-section-head">
           <span>Channels</span>
@@ -118,7 +136,7 @@ export default function Sidebar({
           {channels.map((c) => {
             const hasUnread = (c.has_unread || liveUnread.has(c.id)) && activeView !== c.id;
             return (
-              <li key={c.id}>
+              <li key={c.id} className="side-list-item">
                 <button
                   className={`side-item ${activeView === c.id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
                   onClick={() => {
@@ -153,7 +171,7 @@ export default function Sidebar({
           {dms.map((dm) => {
             const hasUnread = unreadDmChannelIds.has(dm.channel_id) && activeView !== dm.channel_id;
             return (
-              <li key={dm.channel_id}>
+              <li key={dm.channel_id} className="side-list-item">
                 <button
                   className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
                   onClick={() => onSelectDm(dm.channel_id, (dm.full_name || 'Direct message') + (dm.is_self ? ' (you)' : ''), dm.user_id)}

@@ -13,6 +13,18 @@ interface NotificationBellProps {
   onOpenEvent: (event: { title: string; startsAt: string; venue: string | null }) => void;
 }
 
+// Time for today's notifications, "DD Mon, HH:MM" for anything older - so a
+// notification from a previous day never looks like it happened minutes ago.
+function formatNotifTime(iso: string): string {
+  const d = new Date(iso);
+  const isToday = d.toDateString() === new Date().toDateString();
+  if (isToday) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ', ' +
+    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 // Header bell. Shows an unread badge and a dropdown of recent notifications,
 // each with a real preview. Mention and DM items jump to the conversation;
 // announcement and event items open their details.
@@ -96,7 +108,7 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
               <div className="bell-empty">You're all caught up.</div>
             )}
             <ul className="bell-list">
-              {notifications.filter((n) => n.type !== 'dm').slice(0, 15).map((n) => {
+              {notifications.filter((n) => n.type !== 'dm').slice(0, 50).map((n) => {
                 const { title, preview, clickable } = describe(n);
                 return (
                   <li key={n.id}>
@@ -110,7 +122,7 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
                         {preview && <span className="bell-item-preview">{preview}</span>}
                       </div>
                       <span className="bell-item-time">
-                        {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatNotifTime(n.created_at)}
                       </span>
                     </button>
                   </li>

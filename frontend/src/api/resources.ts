@@ -225,6 +225,14 @@ export const directoryApi = {
     apiRequest<{ results: Person[] }>(`/api/v1/directory/search?q=${encodeURIComponent(q)}`),
   birthdays: () => apiRequest<{ birthdays: Birthday[] }>('/api/v1/directory/birthdays'),
   profile: (userId: string) => apiRequest<{ profile: FullProfile }>(`/api/v1/directory/${userId}`),
+  updateMe: (input: {
+    fullName?: string;
+    jobTitle?: string;
+    phone?: string;
+    address?: string;
+    linkedinUrl?: string;
+    timezone?: string;
+  }) => apiRequest<{ profile: FullProfile }>('/api/v1/directory/me', { method: 'PATCH', body: input }),
 };
 
 export const notificationsApi = {

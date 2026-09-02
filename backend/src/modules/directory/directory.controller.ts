@@ -60,7 +60,7 @@ export async function profile(req: Request, res: Response) {
 
 export async function updateMe(req: Request, res: Response) {
   try {
-    const { fullName, jobTitle, phone, address, linkedinUrl, timezone } = req.body;
+    const { fullName, jobTitle, phone, address, linkedinUrl, timezone, dateOfBirth } = req.body;
     const updated = await updateOwnProfile(req.user!.userId, {
       fullName,
       jobTitle,
@@ -68,6 +68,7 @@ export async function updateMe(req: Request, res: Response) {
       address,
       linkedinUrl,
       timezone,
+      dateOfBirth,
     });
     return res.json({ profile: updated });
   } catch (err) {

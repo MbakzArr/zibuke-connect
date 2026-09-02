@@ -780,6 +780,7 @@
   font-size: 14px; color: var(--ink); font-weight: 400;
 }
 .profile-edit-form input:focus { border-color: var(--indigo-600); outline: none; }
+.profile-field-hint { font-size: 11px; font-weight: 400; color: var(--ink-faint); margin-top: 2px; }
 .profile-self-actions { display: flex; gap: var(--sp-2); }
 .profile-msg-btn {
   width: 100%; padding: 9px; border: none; background: var(--indigo-600); color: #fff;

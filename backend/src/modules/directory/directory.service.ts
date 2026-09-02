@@ -18,6 +18,7 @@ const PUBLIC_PROFILE_COLUMNS = `
   p.phone,
   p.linkedin_url,
   p.timezone,
+  TO_CHAR(p.date_of_birth, 'YYYY-MM-DD') AS date_of_birth,
   (SELECT hd.name FROM departments hd WHERE hd.head_user_id = u.id LIMIT 1) AS heads_department_name
 `;
 
@@ -108,19 +109,22 @@ interface UpdateProfileInput {
   address?: string;
   linkedinUrl?: string;
   timezone?: string;
+  dateOfBirth?: string; // 'YYYY-MM-DD'
 }
 
 export async function updateOwnProfile(userId: string, input: UpdateProfileInput) {
   const result = await pool.query(
     `UPDATE employee_profiles
-     SET full_name    = COALESCE($2, full_name),
-         job_title    = COALESCE($3, job_title),
-         phone        = COALESCE($4, phone),
-         address      = COALESCE($5, address),
-         linkedin_url = COALESCE($6, linkedin_url),
-         timezone     = COALESCE($7, timezone)
+     SET full_name     = COALESCE($2, full_name),
+         job_title     = COALESCE($3, job_title),
+         phone         = COALESCE($4, phone),
+         address       = COALESCE($5, address),
+         linkedin_url  = COALESCE($6, linkedin_url),
+         timezone      = COALESCE($7, timezone),
+         date_of_birth = COALESCE($8::date, date_of_birth)
      WHERE user_id = $1
-     RETURNING user_id, full_name, job_title, phone, address, linkedin_url, timezone`,
+     RETURNING user_id, full_name, job_title, phone, address, linkedin_url, timezone,
+               TO_CHAR(date_of_birth, 'YYYY-MM-DD') AS date_of_birth`,
     [
       userId,
       input.fullName ?? null,
@@ -129,6 +133,7 @@ export async function updateOwnProfile(userId: string, input: UpdateProfileInput
       input.address ?? null,
       input.linkedinUrl ?? null,
       input.timezone ?? null,
+      input.dateOfBirth ?? null,
     ]
   );
   return result.rows[0];

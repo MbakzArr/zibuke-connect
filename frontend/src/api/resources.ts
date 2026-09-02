@@ -158,6 +158,7 @@ export interface FullProfile {
   hire_date: string | null;
   manager_name: string | null;
   heads_department_name: string | null;
+  date_of_birth: string | null;
 }
 
 export const channelsApi = {
@@ -248,6 +249,7 @@ export const directoryApi = {
     address?: string;
     linkedinUrl?: string;
     timezone?: string;
+    dateOfBirth?: string;
   }) => apiRequest<{ profile: FullProfile }>('/api/v1/directory/me', { method: 'PATCH', body: input }),
 };
 

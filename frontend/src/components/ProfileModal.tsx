@@ -5,6 +5,22 @@ import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import { statusColor, statusLabel } from '../util/status';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// "Aug 15" from a "YYYY-MM-DD" string - deliberately NOT going through
+// Date/Intl here. A plain string split avoids any timezone-conversion
+// edge case entirely (no risk of a date landing on the wrong day, no
+// risk of an "Invalid time value" crash if a malformed string ever slips
+// through - it just quietly returns nothing instead of throwing).
+function formatBirthday(dateStr: string): string | null {
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return null;
+  const monthIndex = Number(parts[1]) - 1;
+  const day = Number(parts[2]);
+  if (monthIndex < 0 || monthIndex > 11 || !day) return null;
+  return `${MONTHS[monthIndex]} ${day}`;
+}
+
 interface ProfileModalProps {
   userId: string;
   onClose: () => void;
@@ -25,7 +41,7 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
-  const [form, setForm] = useState({ jobTitle: '', phone: '', address: '', linkedinUrl: '', timezone: '' });
+  const [form, setForm] = useState({ jobTitle: '', phone: '', address: '', linkedinUrl: '', timezone: '', dateOfBirth: '' });
   const [saving, setSaving] = useState(false);
   const isMe = userId === user?.id;
 
@@ -38,6 +54,7 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
         address: d.profile.address || '',
         linkedinUrl: d.profile.linkedin_url || '',
         timezone: d.profile.timezone || '',
+        dateOfBirth: d.profile.date_of_birth || '',
       });
     });
   }, [userId]);
@@ -51,6 +68,7 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
         address: form.address.trim(),
         linkedinUrl: form.linkedinUrl.trim(),
         timezone: form.timezone.trim(),
+        dateOfBirth: form.dateOfBirth || undefined,
       });
       setProfile((prev) => (prev ? { ...prev, ...updated } : prev));
       setEditing(false);
@@ -107,6 +125,14 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
                 <label>Timezone
                   <input value={form.timezone} onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))} placeholder="e.g. Africa/Johannesburg" />
                 </label>
+                <label>Date of birth
+                  <input
+                    type="date"
+                    value={form.dateOfBirth}
+                    onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                  />
+                  <span className="profile-field-hint">Used for the Celebrate/birthday card on the hub - only the month and day are ever shown to others.</span>
+                </label>
                 <div className="hub-post-actions">
                   <button className="hub-post-cancel" onClick={() => setEditing(false)}>Cancel</button>
                   <button className="hub-post-send" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
@@ -124,6 +150,9 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
                   {profile.phone && <div><dt>Phone</dt><dd>{profile.phone}</dd></div>}
                   {profile.address && <div><dt>Address</dt><dd>{profile.address}</dd></div>}
                   {profile.timezone && <div><dt>Timezone</dt><dd>{profile.timezone}</dd></div>}
+                  {profile.date_of_birth && formatBirthday(profile.date_of_birth) && (
+                    <div><dt>Birthday</dt><dd>🎂 {formatBirthday(profile.date_of_birth)}</dd></div>
+                  )}
                   {profile.manager_name && (
                     <div><dt>Manager</dt><dd>{profile.manager_name}</dd></div>
                   )}

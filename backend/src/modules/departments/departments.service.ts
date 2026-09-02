@@ -58,12 +58,19 @@ export async function createDepartment(input: CreateDepartmentInput) {
   );
   const department = result.rows[0];
 
-  // Being named head doesn't do anything visible on its own otherwise -
-  // no badge appears anywhere, no one's told. This is the one place both
-  // of those actually happen: the notification here, and the profile/
-  // directory badge comes from directory.service's PUBLIC_PROFILE_COLUMNS
-  // picking up head_user_id via a subquery.
   if (headUserId) {
+    // You can't sensibly head a department you're not even in - make them
+    // a member automatically. This does NOT touch their role (still just
+    // whatever it was); "head" is a label, department_admin is the actual
+    // permission, and those stay deliberately separate - see the admin
+    // panel's nudge-to-promote for the connection between them.
+    await pool.query('UPDATE users SET department_id = $1 WHERE id = $2', [department.id, headUserId]);
+
+    // Being named head doesn't do anything visible on its own otherwise -
+    // no badge appears anywhere, no one's told. This is the one place both
+    // of those actually happen: the notification here, and the profile/
+    // directory badge comes from directory.service's PUBLIC_PROFILE_COLUMNS
+    // picking up head_user_id via a subquery.
     createNotification({ userId: headUserId, type: 'department_head', sourceId: department.id })
       .catch((err) => console.error('Department head notification failed:', err));
   }
@@ -121,10 +128,11 @@ export async function updateDepartment(
         params
       )).rows[0];
 
-  // Only notify when the head is actually CHANGING to someone new - not
-  // on every unrelated edit (renaming the department shouldn't re-notify
-  // the existing head as if they were just appointed).
+  // Only notify (and auto-join) when the head is actually CHANGING to
+  // someone new - not on every unrelated edit (renaming the department
+  // shouldn't re-notify the existing head as if they were just appointed).
   if (headUserId && headUserId !== existing.head_user_id) {
+    await pool.query('UPDATE users SET department_id = $1 WHERE id = $2', [department.id, headUserId]);
     createNotification({ userId: headUserId, type: 'department_head', sourceId: department.id })
       .catch((err) => console.error('Department head notification failed:', err));
   }

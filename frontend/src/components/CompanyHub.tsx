@@ -23,6 +23,7 @@ import AnnouncementModal from './AnnouncementModal';
 import PeopleDirectoryModal from './PeopleDirectoryModal';
 import ProfileModal from './ProfileModal';
 import EventListItem from './EventListItem';
+import AnnouncementScopePicker from './AnnouncementScopePicker';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
@@ -288,7 +289,10 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
             {(announcementsExpanded ? announcements : announcements.slice(0, 3)).map((a) => (
               <div key={a.id} className="hub-ann">
                 <button className="hub-ann-open" onClick={() => setOpenAnn(a)}>
-                  <div className="hub-ann-title">{a.title}</div>
+                  <div className="hub-ann-title">
+                    {a.title}
+                    {a.department_name && <span className="hub-ann-dept-badge">🏢 {a.department_name}</span>}
+                  </div>
                   <div className="hub-ann-body">{a.content}</div>
                   <div className="hub-ann-meta">
                     {a.author_name} · {new Date(a.created_at).toLocaleDateString()}
@@ -580,16 +584,18 @@ function NewAnnouncement({ onPosted }: { onPosted: (a: Announcement) => void }) 
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function post() {
     if (!title.trim() || !content.trim()) return;
     setBusy(true);
     try {
-      const { announcement } = await announcementsApi.create(title.trim(), content.trim());
+      const { announcement } = await announcementsApi.create(title.trim(), content.trim(), departmentId);
       onPosted(announcement);
       setTitle('');
       setContent('');
+      setDepartmentId(null);
       setOpen(false);
     } finally {
       setBusy(false);
@@ -602,6 +608,7 @@ function NewAnnouncement({ onPosted }: { onPosted: (a: Announcement) => void }) 
 
   return (
     <div className="hub-post-form">
+      <AnnouncementScopePicker departmentId={departmentId} onChange={setDepartmentId} />
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
       <textarea
         value={content}

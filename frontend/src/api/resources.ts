@@ -151,6 +151,7 @@ export interface FullProfile {
   linkedin_url: string | null;
   timezone: string | null;
   department_name: string | null;
+  department_id?: string | null;
   address: string | null;
   hire_date: string | null;
   manager_name: string | null;
@@ -225,10 +226,10 @@ export const messagesApi = {
 export const announcementsApi = {
   list: () => apiRequest<{ announcements: Announcement[] }>('/api/v1/announcements'),
   get: (id: string) => apiRequest<{ announcement: Announcement }>(`/api/v1/announcements/${id}`),
-  create: (title: string, content: string) =>
+  create: (title: string, content: string, departmentId?: string | null) =>
     apiRequest<{ announcement: Announcement }>('/api/v1/announcements', {
       method: 'POST',
-      body: { title, content },
+      body: { title, content, departmentId },
     }),
 };
 
@@ -256,6 +257,7 @@ export interface AdminUser {
   deleted_at: string | null;
   full_name: string | null;
   job_title: string | null;
+  department_id: string | null;
   department_name: string | null;
 }
 
@@ -305,7 +307,7 @@ export const webhooksApi = {
 
 export const adminApi = {
   listUsers: () => apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users'),
-  createEmployee: (input: { email: string; password: string; fullName: string; jobTitle?: string; role?: string }) =>
+  createEmployee: (input: { email: string; password: string; fullName: string; jobTitle?: string; role?: string; departmentId?: string | null }) =>
     apiRequest<{ user: { id: string; email: string; role: string } }>('/api/v1/admin/users', {
       method: 'POST',
       body: input,
@@ -318,6 +320,16 @@ export const adminApi = {
     apiRequest<{ user: { id: string; role: string } }>(`/api/v1/admin/users/${userId}/role`, {
       method: 'PATCH',
       body: { role },
+    }),
+  setDepartment: (userId: string, departmentId: string | null) =>
+    apiRequest<{ user: { id: string; department_id: string | null } }>(`/api/v1/admin/users/${userId}/department`, {
+      method: 'PATCH',
+      body: { departmentId },
+    }),
+  resetPassword: (userId: string, newPassword: string) =>
+    apiRequest<{ reset: boolean }>(`/api/v1/admin/users/${userId}/reset-password`, {
+      method: 'PATCH',
+      body: { newPassword },
     }),
 };
 

@@ -305,7 +305,11 @@
 
 .hub-ann { padding: var(--sp-3) 0; border-top: 1px solid var(--surface-3); }
 .hub-ann:first-of-type { border-top: none; }
-.hub-ann-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+.hub-ann-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }
+.hub-ann-dept-badge {
+  font-size: 10px; font-weight: 700; color: var(--indigo-700); background: var(--indigo-50);
+  padding: 1px 7px; border-radius: 9px;
+}
 .hub-ann-body { font-size: 14px; color: var(--ink-soft); line-height: 1.5; }
 .hub-ann-meta { font-size: 12px; color: var(--ink-faint); margin-top: var(--sp-2); }
 
@@ -333,6 +337,16 @@
   font-size: 14px; resize: vertical;
 }
 .hub-post-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+/* ---- Announcement scope picker (whole org vs one department) ---- */
+.ann-scope-select {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--ink-soft); align-self: flex-start; background: var(--surface);
+}
+.ann-scope-locked {
+  margin: 0; font-size: 12px; color: var(--ink-faint);
+  padding: 6px 10px; background: var(--surface-2); border-radius: var(--radius-sm);
+}
+.ann-scope-locked strong { color: var(--indigo-700); }
 .hub-post-cancel {
   padding: 7px 14px; border: 1px solid var(--border); background: var(--surface);
   border-radius: var(--radius-sm); font-size: 13px; color: var(--ink-soft);
@@ -1221,6 +1235,11 @@
 .admin-remove-btn:hover { background: #fecaca; }
 .admin-restore-btn { background: var(--indigo-50); color: var(--indigo-700); }
 .admin-restore-btn:hover { background: var(--indigo-100, #e0e7ff); }
+.admin-reset-btn {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface); font-size: 13px;
+}
+.admin-reset-btn:hover { background: var(--surface-2); }
 .admin-dept-icon { flex-shrink: 0; width: 34px; height: 34px; display: grid; place-items: center; font-size: 16px; }
 .admin-webhook-intro { margin: 0 0 var(--sp-3); font-size: 13px; }
 .admin-token-reveal {

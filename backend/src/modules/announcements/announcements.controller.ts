@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pool } from '../../db/pool';
 import { listAnnouncements, createAnnouncement, getAnnouncement } from './announcements.service';
 
 export async function list(req: Request, res: Response) {
@@ -19,12 +20,30 @@ export async function create(req: Request, res: Response) {
       return res.status(403).json({ error: 'You do not have permission to post announcements' });
     }
 
-    const { title, content, departmentId } = req.body;
+    const { title, content } = req.body;
+    let { departmentId } = req.body;
     if (!title || title.trim().length === 0) {
       return res.status(400).json({ error: 'Announcement title is required' });
     }
     if (!content || content.trim().length === 0) {
       return res.status(400).json({ error: 'Announcement content is required' });
+    }
+
+    // A department_admin can only ever post to THEIR OWN department, never
+    // org-wide and never someone else's - a full admin is the only role
+    // that can do either of those. department_id isn't in the JWT (adding
+    // it there would mean re-issuing every token whenever someone's
+    // department changes), so it's looked up fresh here instead.
+    if (req.user!.role === 'department_admin') {
+      const self = await pool.query('SELECT department_id FROM users WHERE id = $1', [req.user!.userId]);
+      const ownDepartmentId = self.rows[0]?.department_id || null;
+      if (!ownDepartmentId) {
+        return res.status(400).json({ error: "You're not assigned to a department yet, so there's nothing to post an announcement to. Ask an admin to assign you one." });
+      }
+      if (departmentId && departmentId !== ownDepartmentId) {
+        return res.status(403).json({ error: 'You can only post announcements to your own department' });
+      }
+      departmentId = ownDepartmentId;
     }
 
     const announcement = await createAnnouncement({
@@ -40,7 +59,7 @@ export async function create(req: Request, res: Response) {
       return res.status(400).json({ error: 'That department is not part of your organization' });
     }
     console.error('Create announcement error:', err);
-    return res.status(500).json({ error: 'Could not create announcement' });
+    return res.status(500).json({ error: 'Could not post announcement' });
   }
 }
 

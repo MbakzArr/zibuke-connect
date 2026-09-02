@@ -56,6 +56,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
 function EmployeesTab() {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -65,8 +66,12 @@ function EmployeesTab() {
   async function load() {
     setLoading(true);
     try {
-      const { users } = await adminApi.listUsers();
+      const [{ users }, { departments }] = await Promise.all([
+        adminApi.listUsers(),
+        departmentsApi.list(),
+      ]);
       setUsers(users);
+      setDepartments(departments);
     } catch {
       setError('Could not load employees.');
     } finally {
@@ -121,6 +126,41 @@ function EmployeesTab() {
     }
   }
 
+  async function handleDepartmentChange(u: AdminUser, departmentId: string) {
+    setBusyId(u.id);
+    try {
+      await adminApi.setDepartment(u.id, departmentId || null);
+      await load();
+      showToast('Department updated.', { type: 'success' });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not update department.', { type: 'error' });
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleResetPassword(u: AdminUser) {
+    // window.prompt, not a modal - this is a rare, admin-only, one-off
+    // action (matches how confirm() is used elsewhere in the panel), not
+    // worth a dedicated dialog component.
+    const newPassword = window.prompt(`New temporary password for ${u.full_name || u.email} (at least 8 characters):`);
+    if (!newPassword) return; // cancelled
+    if (newPassword.length < 8) {
+      showToast('Password must be at least 8 characters.', { type: 'error' });
+      return;
+    }
+    setBusyId(u.id);
+    try {
+      await adminApi.resetPassword(u.id, newPassword);
+      showToast(`Password reset for ${u.full_name || u.email}. Share it with them directly.`, { type: 'success' });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not reset password.', { type: 'error' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <>
       <div className="admin-panel-toolbar">
@@ -130,7 +170,7 @@ function EmployeesTab() {
         </button>
       </div>
 
-      {showAdd && <AddEmployeeForm onAdded={() => { setShowAdd(false); load(); }} />}
+      {showAdd && <AddEmployeeForm departments={departments} onAdded={() => { setShowAdd(false); load(); }} />}
 
       {error && <p className="hub-error" role="alert">{error}</p>}
       {loading ? (
@@ -148,29 +188,49 @@ function EmployeesTab() {
                   {u.deleted_at && <span className="admin-user-removed-tag">Removed</span>}
                 </span>
                 <span className="admin-user-meta">
-                  {u.email}{u.job_title ? ` · ${u.job_title}` : ''}{u.department_name ? ` · ${u.department_name}` : ''}
+                  {u.email}{u.job_title ? ` · ${u.job_title}` : ''}
                 </span>
               </span>
               {!u.deleted_at && (
-                <select
-                  className="admin-role-select"
-                  value={u.role}
-                  disabled={busyId === u.id}
-                  onChange={(e) => handleRoleChange(u, e.target.value)}
-                >
-                  {Object.entries(ROLE_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    className="admin-role-select"
+                    value={u.department_id || ''}
+                    disabled={busyId === u.id}
+                    title="Department"
+                    onChange={(e) => handleDepartmentChange(u, e.target.value)}
+                  >
+                    <option value="">No department</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="admin-role-select"
+                    value={u.role}
+                    disabled={busyId === u.id}
+                    title="Role"
+                    onChange={(e) => handleRoleChange(u, e.target.value)}
+                  >
+                    {Object.entries(ROLE_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </>
               )}
               {u.deleted_at ? (
                 <button className="admin-restore-btn" disabled={busyId === u.id} onClick={() => handleRestore(u)}>
                   Restore
                 </button>
               ) : (
-                <button className="admin-remove-btn" disabled={busyId === u.id} onClick={() => handleRemove(u)}>
-                  Remove
-                </button>
+                <>
+                  <button className="admin-reset-btn" disabled={busyId === u.id} onClick={() => handleResetPassword(u)} title="Reset their password">
+                    🔑
+                  </button>
+                  <button className="admin-remove-btn" disabled={busyId === u.id} onClick={() => handleRemove(u)}>
+                    Remove
+                  </button>
+                </>
               )}
             </li>
           ))}
@@ -181,12 +241,13 @@ function EmployeesTab() {
   );
 }
 
-function AddEmployeeForm({ onAdded }: { onAdded: () => void }) {
+function AddEmployeeForm({ departments, onAdded }: { departments: Department[]; onAdded: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [role, setRole] = useState('employee');
+  const [departmentId, setDepartmentId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
@@ -209,6 +270,7 @@ function AddEmployeeForm({ onAdded }: { onAdded: () => void }) {
         fullName: fullName.trim(),
         jobTitle: jobTitle.trim() || undefined,
         role,
+        departmentId: departmentId || null,
       });
       showToast(`${fullName.trim()} added.`, { type: 'success' });
       onAdded();
@@ -225,6 +287,12 @@ function AddEmployeeForm({ onAdded }: { onAdded: () => void }) {
       <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" />
       <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Temporary password" type="text" />
       <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Job title (optional)" />
+      <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+        <option value="">No department (set later)</option>
+        {departments.map((d) => (
+          <option key={d.id} value={d.id}>{d.name}</option>
+        ))}
+      </select>
       <select value={role} onChange={(e) => setRole(e.target.value)}>
         <option value="employee">Employee</option>
         <option value="department_admin">Dept admin</option>
@@ -277,6 +345,30 @@ function DepartmentsTab() {
       await departmentsApi.update(dept.id, undefined, headUserId || null);
       await load();
       showToast('Department head updated.', { type: 'success' });
+
+      // Head is just a label, department_admin is the actual permission
+      // (e.g. to post announcements for the department) - those are
+      // deliberately kept separate, but it's easy to name a head and
+      // forget the role never followed. Nudge, don't force.
+      const newHead = headUserId ? people.find((p) => p.id === headUserId) : null;
+      if (newHead && newHead.role === 'employee') {
+        showToast(`${newHead.full_name || newHead.email} is still an Employee - make them Dept admin too?`, {
+          type: 'info',
+          durationMs: 10000,
+          action: {
+            label: 'Promote',
+            onClick: async () => {
+              try {
+                await adminApi.setRole(newHead.id, 'department_admin');
+                await load();
+                showToast(`${newHead.full_name || newHead.email} is now a Dept admin.`, { type: 'success' });
+              } catch (err: any) {
+                showToast(err?.message || 'Could not update their role.', { type: 'error' });
+              }
+            },
+          },
+        });
+      }
     } catch (err: any) {
       showToast(err?.message || 'Could not update department head.', { type: 'error' });
     } finally {

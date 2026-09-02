@@ -8,7 +8,7 @@ const ROLES = ['admin', 'department_admin', 'employee'];
 // or a removed person at all.
 export async function listAllUsers(organizationId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.email, u.role, u.status, u.deleted_at,
+    `SELECT u.id, u.email, u.role, u.status, u.deleted_at, u.department_id,
             p.full_name, p.job_title, d.name AS department_name
      FROM users u
      LEFT JOIN employee_profiles p ON p.user_id = u.id
@@ -27,19 +27,31 @@ interface CreateEmployeeInput {
   fullName: string;
   jobTitle?: string;
   role?: string;
+  departmentId?: string | null;
 }
 
 // Admin-created account: same shape as self-registration, but an admin can
-// also set the role and job title up front instead of the new person
-// having to fill those in later.
+// also set the role, job title and department up front instead of the new
+// person having to fill those in later (department in particular has no
+// self-service path at all - only an admin assigns it).
 export async function createEmployee(input: CreateEmployeeInput) {
-  const { organizationId, password, fullName, jobTitle } = input;
+  const { organizationId, password, fullName, jobTitle, departmentId } = input;
   const email = input.email.trim().toLowerCase();
   const role = input.role && ROLES.includes(input.role) ? input.role : 'employee';
 
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) {
     throw new Error('EMAIL_ALREADY_REGISTERED');
+  }
+
+  if (departmentId) {
+    const dept = await pool.query(
+      'SELECT id FROM departments WHERE id = $1 AND organization_id = $2',
+      [departmentId, organizationId]
+    );
+    if (dept.rows.length === 0) {
+      throw new Error('DEPARTMENT_NOT_IN_ORG');
+    }
   }
 
   const passwordHash = await hashPassword(password);
@@ -49,10 +61,10 @@ export async function createEmployee(input: CreateEmployeeInput) {
     await client.query('BEGIN');
 
     const userResult = await client.query(
-      `INSERT INTO users (organization_id, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (organization_id, email, password_hash, role, department_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, organization_id, email, role`,
-      [organizationId, email, passwordHash, role]
+      [organizationId, email, passwordHash, role, departmentId || null]
     );
     const user = userResult.rows[0];
 
@@ -154,4 +166,52 @@ export async function changeRole(organizationId: string, userId: string, role: s
     throw new Error('NOT_FOUND');
   }
   return result.rows[0];
+}
+
+// Assign (or clear, with departmentId = null) which department someone
+// belongs to. This is what department-scoped announcements actually
+// filter their audience on - without this, "post to Engineering only"
+// would reach nobody, since nobody would ever be recorded as IN
+// Engineering.
+export async function changeDepartment(organizationId: string, userId: string, departmentId: string | null) {
+  if (departmentId) {
+    const dept = await pool.query(
+      'SELECT id FROM departments WHERE id = $1 AND organization_id = $2',
+      [departmentId, organizationId]
+    );
+    if (dept.rows.length === 0) {
+      throw new Error('DEPARTMENT_NOT_IN_ORG');
+    }
+  }
+  const result = await pool.query(
+    `UPDATE users SET department_id = $1
+     WHERE id = $2 AND organization_id = $3 AND deleted_at IS NULL
+     RETURNING id, department_id`,
+    [departmentId, userId, organizationId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error('NOT_FOUND');
+  }
+  return result.rows[0];
+}
+
+// Force-set someone's password without knowing their old one - the admin
+// equivalent of a "forgot password" flow, since there isn't a self-service
+// one (no email sending in this app). Covers the dead end where someone
+// (including the org's only admin) genuinely forgets theirs: without this,
+// the only recovery path is a direct SQL UPDATE on the live database.
+// Named differently from the controller's resetPassword (same operation,
+// different layer) so the import doesn't collide with it.
+export async function resetEmployeePassword(organizationId: string, userId: string, newPassword: string) {
+  const newHash = await hashPassword(newPassword);
+  const result = await pool.query(
+    `UPDATE users SET password_hash = $1
+     WHERE id = $2 AND organization_id = $3 AND deleted_at IS NULL
+     RETURNING id`,
+    [newHash, userId, organizationId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error('NOT_FOUND');
+  }
+  return true;
 }

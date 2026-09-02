@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { listAllUsers, createEmployee, removeEmployee, restoreEmployee, changeRole } from './admin.service';
+import { listAllUsers, createEmployee, removeEmployee, restoreEmployee, changeRole, changeDepartment, resetEmployeePassword } from './admin.service';
 
 export async function list(req: Request, res: Response) {
   try {
@@ -13,7 +13,7 @@ export async function list(req: Request, res: Response) {
 
 export async function create(req: Request, res: Response) {
   try {
-    const { email, password, fullName, jobTitle, role } = req.body;
+    const { email, password, fullName, jobTitle, role, departmentId } = req.body;
     if (!email || !password || !fullName) {
       return res.status(400).json({ error: 'email, password and fullName are required' });
     }
@@ -27,11 +27,15 @@ export async function create(req: Request, res: Response) {
       fullName: String(fullName).trim(),
       jobTitle: jobTitle ? String(jobTitle).trim() : undefined,
       role,
+      departmentId: departmentId || null,
     });
     return res.status(201).json({ user });
   } catch (err: any) {
     if (err.message === 'EMAIL_ALREADY_REGISTERED') {
       return res.status(409).json({ error: 'That email is already registered' });
+    }
+    if (err.message === 'DEPARTMENT_NOT_IN_ORG') {
+      return res.status(400).json({ error: 'That department is not part of your organization' });
     }
     console.error('Admin create employee error:', err);
     return res.status(500).json({ error: 'Could not create employee' });
@@ -90,5 +94,42 @@ export async function setRole(req: Request, res: Response) {
     }
     console.error('Admin set role error:', err);
     return res.status(500).json({ error: 'Could not update role' });
+  }
+}
+
+export async function setDepartment(req: Request, res: Response) {
+  try {
+    // Explicit null clears it. Missing the key entirely is treated the
+    // same as null here (there's no "leave unchanged" case for this
+    // endpoint - it always sets exactly what's sent).
+    const departmentId = req.body.departmentId || null;
+    const updated = await changeDepartment(req.user!.organizationId, req.params.id, departmentId);
+    return res.json({ user: updated });
+  } catch (err: any) {
+    if (err.message === 'DEPARTMENT_NOT_IN_ORG') {
+      return res.status(400).json({ error: 'That department is not part of your organization' });
+    }
+    if (err.message === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    console.error('Admin set department error:', err);
+    return res.status(500).json({ error: 'Could not update department' });
+  }
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || String(newPassword).length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+    await resetEmployeePassword(req.user!.organizationId, req.params.id, newPassword);
+    return res.json({ reset: true });
+  } catch (err: any) {
+    if (err.message === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    console.error('Admin reset password error:', err);
+    return res.status(500).json({ error: 'Could not reset password' });
   }
 }

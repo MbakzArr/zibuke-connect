@@ -45,9 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(email: string, password: string) {
+    // retryOn401: false - login is a fresh attempt with no session to
+    // refresh. Without this, a wrong password (a normal 401) triggers
+    // the same auto-refresh-then-"session expired" flow built for an
+    // authenticated request whose token died mid-session - which doesn't
+    // apply here at all, and ends up hiding the real reason (wrong
+    // email/password) behind a confusing, unrelated message.
     const data = await apiRequest('/api/v1/auth/login', {
       method: 'POST',
       body: { email, password },
+      retryOn401: false,
     });
     setTokens(data.accessToken, data.refreshToken);
     setUser(data.user);

@@ -16,12 +16,13 @@ interface ChannelViewProps {
   jumpToId?: string; // when set, scroll to and flash this message after load
   onOpenDm?: (userId: string, name: string) => void; // open a DM (from a profile)
   onBack?: () => void; // mobile: return to the Company Hub
+  onLeftChannel?: () => void; // called after successfully leaving a group channel
 }
 
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOpenDm, onBack }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOpenDm, onBack, onLeftChannel }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -32,6 +33,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
+  // Whether the CURRENT user is actually a member of this channel. Public
+  // channels are always visible/readable in the sidebar whether you've
+  // joined or not (that's intentional, same as Slack), but sending
+  // requires membership - this is what decides whether the composer or a
+  // "join to participate" prompt renders. Defaults true so DMs (which
+  // don't need this check - you can't view one you're not part of) and
+  // the initial render never flash a false "not a member" state.
+  const [isMember, setIsMember] = useState(true);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [dmStatus, setDmStatus] = useState<{ status: string; availability: string | null } | null>(null);
   // When did the OTHER person in this DM last read it - drives the
@@ -135,6 +144,27 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
       socket.off('channel:read', onRead);
     };
   }, [socket, channel.id, user?.id]);
+
+  // Check actual membership for a group channel. DMs skip this - if you
+  // can open one at all, you're in it. A public channel, though, shows up
+  // in the sidebar for everyone whether joined or not, so this is what
+  // decides between showing the composer or a join prompt.
+  useEffect(() => {
+    if (dmTitle) {
+      setIsMember(true);
+      return;
+    }
+    let cancelled = false;
+    channelsApi.members(channel.id).then((d) => {
+      if (!cancelled) setIsMember(d.members.some((m) => m.id === user?.id));
+    }).catch(() => {
+      // best-effort; if this fails, leave isMember at its current value
+      // rather than wrongly locking someone out of a channel they're in
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [channel.id, dmTitle, user?.id]);
 
   // Join the channel's live room and subscribe to new messages + typing.
   useEffect(() => {
@@ -294,12 +324,51 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     }
   }
 
-  async function remove(id: string) {
+  // Leave this group channel (not applicable to DMs - those are deleted
+  // from the sidebar instead, since "leaving" a 1:1 conversation doesn't
+  // make sense the same way). Confirms first since it's not easily undone
+  // from here - rejoining is possible via Browse Channels for a public
+  // one, but you lose it from "Your channels" either way.
+  async function leaveThisChannel() {
+    if (!window.confirm(`Leave #${channel.name}? You can rejoin later from Browse Channels if it's public.`)) {
+      return;
+    }
     try {
+      await channelsApi.leave(channel.id);
+      setIsMember(false);
+      showToast(`Left #${channel.name}.`, { type: 'success' });
+      onLeftChannel?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Could not leave that channel.', { type: 'error' });
+    }
+  }
+
+  // Public channels stay visible (and readable) in the sidebar whether
+  // you've joined or not - this is the one-click way back in, right from
+  // the conversation you're already looking at, instead of a detour
+  // through Browse Channels.
+  async function joinThisChannel() {
+    try {
+      await channelsApi.join(channel.id);
+      setIsMember(true);
+      showToast(`Joined #${channel.name}.`, { type: 'success' });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not join that channel.', { type: 'error' });
+    }
+  }
+
+  async function remove(id: string) {    try {
       const { message } = await messagesApi.remove(id);
       setMessages((prev) => prev.map((m) => (m.id === id ? message : m)));
       showToast('Message deleted', {
         type: 'success',
+        // Give this one more time on screen than a normal toast - it has
+        // an action to notice and click, not just read. The backend keeps
+        // accepting the undo for 2 minutes as a safety margin, but this is
+        // the actual window a person gets in practice, so it needs to be
+        // long enough to be real (a plain 3.5s default would make "undo"
+        // a lie).
+        durationMs: 12000,
         action: {
           label: 'Undo',
           onClick: async () => {
@@ -320,7 +389,22 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   function send() {
     const content = draft.trim();
     if (!content || !socket) return;
-    socket.emit('message:send', { channelId: channel.id, content });
+    if (!isMember) {
+      showToast(`Join #${channel.name} to send messages.`, { type: 'error' });
+      return;
+    }
+    // The server acks every send with either nothing (success) or an
+    // { error } object - e.g. "you're not a member anymore". That ack was
+    // never being read before, so a rejected send just silently vanished
+    // with the draft cleared and no explanation. Now it's surfaced as a
+    // toast, and the draft is restored so nothing typed gets lost.
+    const sentContent = content;
+    socket.emit('message:send', { channelId: channel.id, content }, (res?: { error?: string }) => {
+      if (res?.error) {
+        showToast(res.error, { type: 'error' });
+        setDraft((current) => current || sentContent);
+      }
+    });
     socket.emit('typing:stop', channel.id);
     setDraft('');
   }
@@ -371,6 +455,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           {!dmTitle && (
             <button className="chan-members-btn" onClick={() => setShowMembers(true)} title="View members">
               👥 Members
+            </button>
+          )}
+          {!dmTitle && (
+            <button className="chan-leave-btn" onClick={leaveThisChannel} title="Leave this channel">
+              🚪 Leave
             </button>
           )}
           <div className="chan-search">
@@ -529,17 +618,24 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
         {typingName ? `${typingName} is typing...` : '\u00a0'}
       </div>
 
-      <div className="chan-composer">
-        <div className="chan-composer-inner">
-          <input
-            value={draft}
-            onChange={(e) => handleTyping(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && send()}
-            placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
-          />
-          <button onClick={send} disabled={!draft.trim()}>Send</button>
+      {isMember ? (
+        <div className="chan-composer">
+          <div className="chan-composer-inner">
+            <input
+              value={draft}
+              onChange={(e) => handleTyping(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && send()}
+              placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
+            />
+            <button onClick={send} disabled={!draft.trim()}>Send</button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="chan-join-prompt">
+          <span>You're not a member of #{channel.name} yet.</span>
+          <button onClick={joinThisChannel}>Join to send messages</button>
+        </div>
+      )}
 
       {showMembers && (
         <MembersModal

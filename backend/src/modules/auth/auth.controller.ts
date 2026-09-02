@@ -1,27 +1,5 @@
 import { Request, Response } from 'express';
-import { registerUser, loginUser, refreshAccessToken } from './auth.service';
-
-export async function register(req: Request, res: Response) {
-  try {
-    const { organizationId, email, password, fullName } = req.body;
-
-    if (!organizationId || !email || !password || !fullName) {
-      return res.status(400).json({ error: 'organizationId, email, password and fullName are required' });
-    }
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const user = await registerUser({ organizationId, email, password, fullName });
-    return res.status(201).json({ user });
-  } catch (err: any) {
-    if (err.message === 'EMAIL_ALREADY_REGISTERED') {
-      return res.status(409).json({ error: 'An account with this email already exists' });
-    }
-    console.error('Register error:', err);
-    return res.status(500).json({ error: 'Something went wrong while registering' });
-  }
-}
+import { loginUser, refreshAccessToken } from './auth.service';
 
 export async function login(req: Request, res: Response) {
   try {

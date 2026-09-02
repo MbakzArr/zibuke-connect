@@ -56,7 +56,12 @@ export default function PeopleDirectoryModal({
                   {(p.full_name || '?').charAt(0).toUpperCase()}
                 </span>
                 <span className="directory-info">
-                  <span className="directory-name">{p.full_name || p.email}</span>
+                  <span className="directory-name">
+                    {p.full_name || p.email}
+                    {p.heads_department_name && (
+                      <span className="directory-head-badge" title={`Head of ${p.heads_department_name}`}>🏢 Head</span>
+                    )}
+                  </span>
                   <span className="directory-line">
                     <span className="directory-jobtitle">{p.job_title || 'Job title not set'}</span>
                     {p.department_name && <span className="directory-dept">{p.department_name}</span>}

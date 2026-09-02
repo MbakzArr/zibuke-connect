@@ -72,6 +72,15 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
         clickable: !!n.event_title,
       };
     }
+    if (n.type === 'department_head') {
+      return {
+        title: `You're now head of ${n.department_name || 'a department'}`,
+        preview: null,
+        // No dedicated department view to jump to yet - this is
+        // informational only, same treatment a plain status update gets.
+        clickable: false,
+      };
+    }
     return { title: 'Notification', preview: null, clickable: false };
   }
 

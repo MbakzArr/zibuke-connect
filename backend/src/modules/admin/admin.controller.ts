@@ -46,6 +46,9 @@ export async function remove(req: Request, res: Response) {
     if (err.message === 'CANNOT_REMOVE_SELF') {
       return res.status(400).json({ error: "You can't remove your own account" });
     }
+    if (err.message === 'LAST_ADMIN') {
+      return res.status(400).json({ error: 'Cannot remove the last remaining admin - promote someone else to admin first' });
+    }
     if (err.message === 'NOT_FOUND') {
       return res.status(404).json({ error: 'Employee not found' });
     }
@@ -78,6 +81,9 @@ export async function setRole(req: Request, res: Response) {
   } catch (err: any) {
     if (err.message === 'INVALID_ROLE') {
       return res.status(400).json({ error: 'role must be admin, department_admin or employee' });
+    }
+    if (err.message === 'LAST_ADMIN') {
+      return res.status(400).json({ error: 'Cannot demote the last remaining admin - promote someone else to admin first' });
     }
     if (err.message === 'NOT_FOUND') {
       return res.status(404).json({ error: 'Employee not found' });

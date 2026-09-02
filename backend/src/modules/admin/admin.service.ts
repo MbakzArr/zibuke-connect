@@ -72,6 +72,19 @@ export async function createEmployee(input: CreateEmployeeInput) {
   }
 }
 
+// How many active (not removed) admins the org currently has - used to
+// stop the last one from being removed or demoted, which would lock
+// everyone out of the admin panel with no way back in short of a direct
+// database edit.
+async function countActiveAdmins(organizationId: string) {
+  const result = await pool.query(
+    `SELECT COUNT(*)::int AS count FROM users
+     WHERE organization_id = $1 AND role = 'admin' AND deleted_at IS NULL`,
+    [organizationId]
+  );
+  return result.rows[0].count as number;
+}
+
 // Soft delete: keep the row (their message history still needs a real
 // user to join against), stamp deleted_at. They can no longer log in or
 // appear in the directory. Reversible by clearing deleted_at, on purpose -
@@ -80,6 +93,17 @@ export async function removeEmployee(organizationId: string, userId: string, cal
   if (userId === callerId) {
     throw new Error('CANNOT_REMOVE_SELF');
   }
+  const target = await pool.query(
+    `SELECT role FROM users WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
+    [userId, organizationId]
+  );
+  if (target.rows.length === 0) {
+    throw new Error('NOT_FOUND');
+  }
+  if (target.rows[0].role === 'admin' && (await countActiveAdmins(organizationId)) <= 1) {
+    throw new Error('LAST_ADMIN');
+  }
+
   const result = await pool.query(
     `UPDATE users SET deleted_at = now()
      WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL
@@ -109,6 +133,17 @@ export async function changeRole(organizationId: string, userId: string, role: s
   if (!ROLES.includes(role)) {
     throw new Error('INVALID_ROLE');
   }
+  const target = await pool.query(
+    `SELECT role FROM users WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL`,
+    [userId, organizationId]
+  );
+  if (target.rows.length === 0) {
+    throw new Error('NOT_FOUND');
+  }
+  if (target.rows[0].role === 'admin' && role !== 'admin' && (await countActiveAdmins(organizationId)) <= 1) {
+    throw new Error('LAST_ADMIN');
+  }
+
   const result = await pool.query(
     `UPDATE users SET role = $1
      WHERE id = $2 AND organization_id = $3 AND deleted_at IS NULL

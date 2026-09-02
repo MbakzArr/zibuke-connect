@@ -448,6 +448,7 @@ export default function Workspace() {
                 })
               }
               onBack={openHub}
+              onLeftChannel={openHub}
             />
           ) : null}
         </div>

@@ -45,6 +45,7 @@ export interface Person {
   full_name: string | null;
   job_title: string | null;
   department_name: string | null;
+  heads_department_name?: string | null;
 }
 
 
@@ -80,6 +81,7 @@ export interface Notification {
   event_title?: string | null;
   event_starts_at?: string | null;
   event_venue?: string | null;
+  department_name?: string | null;
 }
 
 
@@ -152,6 +154,7 @@ export interface FullProfile {
   address: string | null;
   hire_date: string | null;
   manager_name: string | null;
+  heads_department_name: string | null;
 }
 
 export const channelsApi = {
@@ -256,6 +259,50 @@ export interface AdminUser {
   department_name: string | null;
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  head_user_id: string | null;
+  head_name: string | null;
+  created_at: string;
+}
+
+export const departmentsApi = {
+  list: () => apiRequest<{ departments: Department[] }>('/api/v1/departments'),
+  create: (name: string, headUserId?: string) =>
+    apiRequest<{ department: Department }>('/api/v1/departments', {
+      method: 'POST',
+      body: { name, headUserId },
+    }),
+  update: (id: string, name?: string, headUserId?: string | null) =>
+    apiRequest<{ department: Department }>(`/api/v1/departments/${id}`, {
+      method: 'PATCH',
+      body: { name, headUserId },
+    }),
+  remove: (id: string) =>
+    apiRequest<void>(`/api/v1/departments/${id}`, { method: 'DELETE' }),
+};
+
+export interface Webhook {
+  id: string;
+  channel_id: string;
+  channel_name: string;
+  label: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export const webhooksApi = {
+  list: () => apiRequest<{ webhooks: Webhook[] }>('/api/v1/webhooks'),
+  create: (channelId: string, label: string) =>
+    apiRequest<{ webhook: Webhook; token: string; note: string }>('/api/v1/webhooks', {
+      method: 'POST',
+      body: { channelId, label },
+    }),
+  remove: (id: string) =>
+    apiRequest<void>(`/api/v1/webhooks/${id}`, { method: 'DELETE' }),
+};
+
 export const adminApi = {
   listUsers: () => apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users'),
   createEmployee: (input: { email: string; password: string; fullName: string; jobTitle?: string; role?: string }) =>
@@ -324,5 +371,10 @@ export const usersApi = {
     apiRequest<{ availability: string }>('/api/v1/users/me/availability', {
       method: 'PATCH',
       body: { availability },
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiRequest<{ changed: boolean }>('/api/v1/users/me/password', {
+      method: 'PATCH',
+      body: { currentPassword, newPassword },
     }),
 };

@@ -212,6 +212,20 @@
 .chan-composer button:hover:not(:disabled) { background: var(--indigo-700); }
 .chan-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Shown instead of the composer when you're viewing a public channel you
+   haven't joined (or just left) - a channel preview, same idea as Slack's
+   "join to send messages" bar. */
+.chan-join-prompt {
+  display: flex; align-items: center; justify-content: center; gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5); border-top: 1px solid var(--border); flex-shrink: 0;
+  background: var(--surface-2); font-size: 13px; color: var(--ink-soft); flex-wrap: wrap;
+}
+.chan-join-prompt button {
+  padding: 8px 18px; border: none; border-radius: var(--radius);
+  background: var(--indigo-600); color: #fff; font-weight: 600; font-size: 13px;
+}
+.chan-join-prompt button:hover { background: var(--indigo-700); }
+
 /* ---- Company Hub ---- */
 .hub { overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-6); }
 .hub-hero, .hub-grid { width: 100%; }
@@ -707,6 +721,11 @@
   border-radius: 16px; font-size: 13px; color: var(--ink-soft);
 }
 .chan-members-btn:hover { background: var(--surface-3); }
+.chan-leave-btn {
+  padding: 6px 12px; border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 16px; font-size: 13px; color: var(--ink-soft);
+}
+.chan-leave-btn:hover { background: #fee2e2; color: var(--danger); border-color: #fecaca; }
 
 /* ---- Clickable announcement in hub ---- */
 .hub-ann-open {
@@ -726,6 +745,10 @@
 }
 .profile-name { font-size: 17px; font-weight: 650; }
 .profile-role { font-size: 14px; color: var(--ink-soft); }
+.profile-head-badge {
+  display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700;
+  color: var(--indigo-700); background: var(--indigo-50); padding: 2px 9px; border-radius: 10px;
+}
 .profile-status { font-size: 12px; color: var(--ink-faint); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
 .profile-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .profile-fields { margin: 0 0 var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -743,11 +766,14 @@
   font-size: 14px; color: var(--ink); font-weight: 400;
 }
 .profile-edit-form input:focus { border-color: var(--indigo-600); outline: none; }
+.profile-self-actions { display: flex; gap: var(--sp-2); }
 .profile-msg-btn {
   width: 100%; padding: 9px; border: none; background: var(--indigo-600); color: #fff;
   border-radius: var(--radius-sm); font-size: 14px; font-weight: 600;
 }
 .profile-msg-btn:hover { background: var(--indigo-700); }
+.profile-msg-btn-secondary { background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border); }
+.profile-msg-btn-secondary:hover { background: var(--surface-3); }
 
 /* ---- Announcement modal ---- */
 .ann-modal-body { padding: var(--sp-5); }
@@ -1057,7 +1083,11 @@
 }
 .directory-row-btn:hover { background: var(--surface-2); }
 .directory-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
-.directory-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.directory-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.directory-head-badge {
+  font-size: 10px; font-weight: 700; color: var(--indigo-700); background: var(--indigo-50);
+  padding: 1px 7px; border-radius: 9px;
+}
 .directory-role { font-size: 12px; color: var(--ink-faint); }
 .directory-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .directory-jobtitle { font-size: 12px; color: var(--ink-soft); }
@@ -1146,6 +1176,13 @@
 .mini-cal-event-list { list-style: none; margin: 0; padding: 0; }
 
 /* ---- Admin panel: manage employees ---- */
+.admin-tabs { display: flex; gap: var(--sp-2); padding: 0 var(--sp-5); border-bottom: 1px solid var(--border); }
+.admin-tab {
+  padding: 10px 14px; border: none; background: transparent; font-size: 13px; font-weight: 600;
+  color: var(--ink-faint); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.admin-tab:hover { color: var(--ink); }
+.admin-tab.is-active { color: var(--indigo-700); border-bottom-color: var(--indigo-600); }
 .admin-panel-body { padding: var(--sp-5); }
 .admin-panel-toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -1184,8 +1221,29 @@
 .admin-remove-btn:hover { background: #fecaca; }
 .admin-restore-btn { background: var(--indigo-50); color: var(--indigo-700); }
 .admin-restore-btn:hover { background: var(--indigo-100, #e0e7ff); }
+.admin-dept-icon { flex-shrink: 0; width: 34px; height: 34px; display: grid; place-items: center; font-size: 16px; }
+.admin-webhook-intro { margin: 0 0 var(--sp-3); font-size: 13px; }
+.admin-token-reveal {
+  padding: var(--sp-4); margin-bottom: var(--sp-4); border-radius: var(--radius);
+  background: #fffaf0; border: 1px solid #fde9c8;
+}
+.admin-token-reveal p { margin: 0 0 8px; font-size: 13px; }
+.admin-token-value {
+  display: block; padding: 8px 10px; margin-bottom: 10px; border-radius: var(--radius-sm);
+  background: var(--ink); color: #fff; font-size: 12px; word-break: break-all;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
 
 @media (max-width: 720px) {
   .admin-user-row { flex-wrap: wrap; }
   .admin-role-select { margin-left: 42px; }
+}
+
+@media (max-width: 720px) {
+  /* Title + Members + Leave + search all in one row gets tight on a
+     phone - drop the button labels down to icon-only so everything still
+     fits without wrapping onto a second line. */
+  .chan-members-btn, .chan-leave-btn { padding: 6px 8px; font-size: 0; }
+  .chan-members-btn::before { content: '👥'; font-size: 15px; }
+  .chan-leave-btn::before { content: '🚪'; font-size: 15px; }
 }

@@ -36,29 +36,30 @@ export const openApiSpec = {
   },
   security: [{ bearerAuth: [] }],
   paths: {
-    '/api/v1/auth/register': {
+    '/api/v1/admin/users': {
+      get: { tags: ['Admin'], summary: 'List all employees, including removed ones (admin only)', responses: { '200': { description: 'Users' } } },
       post: {
-        tags: ['Auth'],
-        summary: 'Register a new user',
-        security: [],
+        tags: ['Admin'],
+        summary: 'Create a new employee account (admin only). Replaces the old public /auth/register - see auth.routes.ts for why that was removed.',
         requestBody: {
           required: true,
           content: {
             'application/json': {
               schema: {
                 type: 'object',
-                required: ['organizationId', 'email', 'password', 'fullName'],
+                required: ['email', 'password', 'fullName'],
                 properties: {
-                  organizationId: { type: 'string', format: 'uuid' },
                   email: { type: 'string', format: 'email' },
                   password: { type: 'string', minLength: 8 },
                   fullName: { type: 'string' },
+                  jobTitle: { type: 'string' },
+                  role: { type: 'string', enum: ['admin', 'department_admin', 'employee'] },
                 },
               },
             },
           },
         },
-        responses: { '201': { description: 'User created' }, '409': { description: 'Email already registered' } },
+        responses: { '201': { description: 'Employee created' }, '409': { description: 'Email already registered' } },
       },
     },
     '/api/v1/auth/login': {

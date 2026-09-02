@@ -17,7 +17,8 @@ const PUBLIC_PROFILE_COLUMNS = `
   p.job_title,
   p.phone,
   p.linkedin_url,
-  p.timezone
+  p.timezone,
+  (SELECT hd.name FROM departments hd WHERE hd.head_user_id = u.id LIMIT 1) AS heads_department_name
 `;
 
 // Search by name, job title or department name. Case-insensitive partial

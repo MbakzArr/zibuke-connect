@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { directoryApi, type FullProfile } from '../api/resources';
+import { directoryApi, usersApi, type FullProfile } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
@@ -16,12 +16,15 @@ interface ProfileModalProps {
 // profile, an Edit toggle lets you fill in the self-service fields
 // (job title, phone, address, LinkedIn, timezone) via PATCH /directory/me -
 // that endpoint already existed on the backend but nothing in the UI ever
-// called it, which is why these fields sat empty for everyone.
+// called it, which is why these fields sat empty for everyone. A separate
+// Change Password toggle covers the other self-service gap: admin-created
+// accounts get a temporary password with no way to change it otherwise.
 export default function ProfileModal({ userId, onClose, onMessage }: ProfileModalProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [editing, setEditing] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [form, setForm] = useState({ jobTitle: '', phone: '', address: '', linkedinUrl: '', timezone: '' });
   const [saving, setSaving] = useState(false);
   const isMe = userId === user?.id;
@@ -77,6 +80,9 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
               <div>
                 <div className="profile-name">{profile.full_name || profile.email}</div>
                 {profile.job_title && <div className="profile-role">{profile.job_title}</div>}
+                {profile.heads_department_name && (
+                  <div className="profile-head-badge">🏢 Head of {profile.heads_department_name}</div>
+                )}
                 <div className="profile-status">
                   <span className="profile-status-dot" style={{ background: statusColor(profile.status, profile.availability) }} />
                   {statusLabel(profile.status, profile.availability)}
@@ -106,6 +112,8 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
                   <button className="hub-post-send" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
                 </div>
               </div>
+            ) : changingPassword ? (
+              <ChangePasswordForm onDone={() => setChangingPassword(false)} />
             ) : (
               <>
                 <dl className="profile-fields">
@@ -132,10 +140,15 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
               </>
             )}
 
-            {isMe && !editing && (
-              <button className="profile-msg-btn" onClick={() => setEditing(true)}>
-                ✏️ Edit profile
-              </button>
+            {isMe && !editing && !changingPassword && (
+              <div className="profile-self-actions">
+                <button className="profile-msg-btn" onClick={() => setEditing(true)}>
+                  ✏️ Edit profile
+                </button>
+                <button className="profile-msg-btn profile-msg-btn-secondary" onClick={() => setChangingPassword(true)}>
+                  🔒 Change password
+                </button>
+              </div>
             )}
             {!isMe && onMessage && (
               <button
@@ -147,6 +160,60 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ChangePasswordForm({ onDone }: { onDone: () => void }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  async function submit() {
+    if (!currentPassword || !newPassword) {
+      setError('Fill in both your current and new password.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation don't match.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await usersApi.changePassword(currentPassword, newPassword);
+      showToast('Password changed.', { type: 'success' });
+      onDone();
+    } catch (err: any) {
+      setError(err?.message || 'Could not change your password.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="profile-edit-form">
+      <label>Current password
+        <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoFocus />
+      </label>
+      <label>New password
+        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+      </label>
+      <label>Confirm new password
+        <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+      </label>
+      {error && <p className="hub-error" role="alert">{error}</p>}
+      <div className="hub-post-actions">
+        <button className="hub-post-cancel" onClick={onDone}>Cancel</button>
+        <button className="hub-post-send" onClick={submit} disabled={busy}>{busy ? 'Changing...' : 'Change password'}</button>
       </div>
     </div>
   );

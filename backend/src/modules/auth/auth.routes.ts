@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { register, login, refresh } from './auth.controller';
+import { login, refresh } from './auth.controller';
 
 const router = Router();
 
@@ -12,7 +12,14 @@ const authLimiter = rateLimit({
   message: { error: 'Too many attempts, please try again later' },
 });
 
-router.post('/register', authLimiter, register);
+// NOTE: there used to be an open POST /register here. It took a raw
+// organizationId from the request body with no invite/approval check -
+// and since organizationId is embedded in every access token (JWTs are
+// signed, not encrypted, so anyone can decode their own), any current OR
+// former employee could read their org id and self-register a brand new
+// account, completely bypassing admin control over who's on the team.
+// Account creation now only happens through POST /api/v1/admin/users
+// (admin-only, see modules/admin), which does the same job properly.
 router.post('/login', authLimiter, login);
 router.post('/refresh', refresh);
 

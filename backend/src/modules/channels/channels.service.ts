@@ -42,14 +42,32 @@ export async function listChannelsForUser(organizationId: string, userId: string
 }
 
 // Mark a channel as read by this user right now. Called when they open it.
+// Returns the timestamp actually stored, so the caller can push it out live.
 export async function markChannelRead(userId: string, channelId: string) {
-  await pool.query(
+  const result = await pool.query(
     `INSERT INTO channel_reads (user_id, channel_id, last_read_at)
      VALUES ($1, $2, now())
-     ON CONFLICT (user_id, channel_id) DO UPDATE SET last_read_at = now()`,
+     ON CONFLICT (user_id, channel_id) DO UPDATE SET last_read_at = now()
+     RETURNING last_read_at`,
     [userId, channelId]
   );
-  return true;
+  return result.rows[0].last_read_at;
+}
+
+// For a DM, when did the OTHER participant last read it - powers the
+// "Seen" tick on your own messages. Null if they've never opened it (or
+// this isn't a DM / has no other member, e.g. a self-DM).
+export async function getDmOtherReadAt(channelId: string, userId: string) {
+  const result = await pool.query(
+    `SELECT cr.last_read_at
+     FROM channels c
+     JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
+     LEFT JOIN channel_reads cr ON cr.channel_id = c.id AND cr.user_id = them.user_id
+     WHERE c.id = $1 AND c.is_dm = true
+     LIMIT 1`,
+    [channelId, userId]
+  );
+  return result.rows[0]?.last_read_at || null;
 }
 
 export async function getChannel(organizationId: string, channelId: string) {

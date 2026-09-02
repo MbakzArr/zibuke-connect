@@ -21,6 +21,7 @@ import { statusColor, statusLabel } from '../util/status';
 import Reactions from './Reactions';
 import AnnouncementModal from './AnnouncementModal';
 import PeopleDirectoryModal from './PeopleDirectoryModal';
+import ProfileModal from './ProfileModal';
 import EventListItem from './EventListItem';
 
 interface CompanyHubProps {
@@ -92,6 +93,10 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   const [annReactions, setAnnReactions] = useState<ReactionsMap>({});
   const [bdayReactions, setBdayReactions] = useState<ReactionsMap>({});
   const [openAnn, setOpenAnn] = useState<Announcement | null>(null);
+  // Whoever's avatar/name was just clicked, anywhere on the hub - People
+  // Online, Celebrate today, the Directory. Same modal everywhere, same as
+  // clicking a name under a channel's Members list.
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string[]>([]);
 
@@ -232,11 +237,15 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           <div className="hub-bday-row">
             {birthdays.map((b) => (
               <div key={b.id} className="hub-bday">
-                <span className="hub-avatar" style={{ background: colorFor(b.id) }}>
-                  {(b.full_name || '?').charAt(0).toUpperCase()}
-                </span>
+                <button className="hub-bday-identity" onClick={() => setProfileUserId(b.id)}>
+                  <span className="hub-avatar" style={{ background: colorFor(b.id) }}>
+                    {(b.full_name || '?').charAt(0).toUpperCase()}
+                  </span>
+                </button>
                 <div className="hub-bday-info">
-                  <div className="hub-bday-name">{b.full_name}</div>
+                  <button className="hub-bday-name hub-bday-name-btn" onClick={() => setProfileUserId(b.id)}>
+                    {b.full_name}
+                  </button>
                   <div className="hub-bday-note">🎂 Birthday today</div>
                   <div className="hub-bday-actions">
                     <Reactions targetType="birthday" targetId={b.id} initial={bdayReactions[b.id]} />
@@ -303,7 +312,14 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
               <h3>📅 Your day <span className="hub-day-tz">(SAST)</span></h3>
               <AddEventForm
                 people={people}
-                onCreated={(e) => setEvents((prev) => [...prev, e].sort((a, b) => a.starts_at.localeCompare(b.starts_at)))}
+                onCreated={(e, date) => {
+                  // Only splice it into "Your Day" if it's actually for
+                  // today - a future date was intentionally added elsewhere
+                  // on the calendar, not into this list.
+                  if (date === todaySAST()) {
+                    setEvents((prev) => [...prev, e].sort((a, b) => a.starts_at.localeCompare(b.starts_at)));
+                  }
+                }}
               />
             </div>
             {events.length === 0 && <p className="hub-muted">Nothing scheduled for today.</p>}
@@ -338,7 +354,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
             <ul className="hub-people">
               {(peopleExpanded ? online : online.slice(0, CAP)).map((p) => (
                 <li key={p.id}>
-                  <button className="hub-person hub-person-btn" onClick={() => onMessagePerson(p)}>
+                  <button className="hub-person hub-person-btn" onClick={() => setProfileUserId(p.id)}>
                     <span className="hub-dot is-on" style={{ background: statusColor(p.status, p.availability) }} title={statusLabel(p.status, p.availability)} />
                     <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
                       {(p.full_name || '?').charAt(0).toUpperCase()}
@@ -427,6 +443,28 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
             setDirectoryOpen(false);
             onMessagePerson(p);
           }}
+          onViewProfile={(userId) => {
+            setDirectoryOpen(false);
+            setProfileUserId(userId);
+          }}
+        />
+      )}
+
+      {profileUserId && (
+        <ProfileModal
+          userId={profileUserId}
+          onClose={() => setProfileUserId(null)}
+          onMessage={(userId, name) => {
+            setProfileUserId(null);
+            onMessagePerson({
+              id: userId,
+              email: '',
+              status: 'offline',
+              full_name: name,
+              job_title: null,
+              department_name: null,
+            });
+          }}
         />
       )}
 
@@ -441,15 +479,27 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   );
 }
 
-// Small form to add a "today" event: title, time, optional venue, and
-// optional attendees. The time input is treated as SAST explicitly (not the
-// browser's local timezone) - since SAST has a fixed +2 offset with no
-// daylight saving, appending "+02:00" to whatever time the user types
-// converts it to the correct UTC instant every time. Invited attendees get
-// a real notification (reuses the existing notifications system).
-function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: Event) => void }) {
+// "YYYY-MM-DD" for right now, in SAST specifically (not the browser's local
+// zone) - matches how the backend decides what counts as "today" for the
+// events API, so the date picker's default and the "is this today" check
+// below never drift from what the server considers today.
+function todaySAST(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Johannesburg' }).format(new Date());
+}
+
+// Small form to add an event: title, date (defaults to today, but a
+// different date can be picked - this is also the quickest way to put
+// something on tomorrow's calendar without leaving the hub), time,
+// optional venue, and optional attendees. The time input is treated as
+// SAST explicitly (not the browser's local timezone) - since SAST has a
+// fixed +2 offset with no daylight saving, appending "+02:00" to whatever
+// time the user types converts it to the correct UTC instant every time.
+// Invited attendees get a real notification (reuses the existing
+// notifications system).
+function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: Event, date: string) => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
+  const [date, setDate] = useState(todaySAST);
   const [time, setTime] = useState('');
   const [venue, setVenue] = useState('');
   const [attendeeIds, setAttendeeIds] = useState<Set<string>>(new Set());
@@ -466,14 +516,14 @@ function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: 
   }
 
   async function submit() {
-    if (!title.trim() || !time) return;
+    if (!title.trim() || !date || !time) return;
     setBusy(true);
     try {
-      const todayDate = new Date().toISOString().slice(0, 10);
-      const startsAt = `${todayDate}T${time}:00+02:00`;
+      const startsAt = `${date}T${time}:00+02:00`;
       const { event } = await eventsApi.create(title.trim(), startsAt, venue.trim() || undefined, Array.from(attendeeIds));
-      onCreated(event);
+      onCreated(event, date);
       setTitle('');
+      setDate(todaySAST());
       setTime('');
       setVenue('');
       setAttendeeIds(new Set());
@@ -495,6 +545,7 @@ function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: 
     <div className="hub-event-form-wrap">
       <div className="hub-event-form">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Event title" />
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="hub-event-date" />
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         <input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue (optional)" className="hub-event-venue" />
         <button className="hub-event-attendee-btn" onClick={() => setPickerOpen((v) => !v)}>
@@ -505,6 +556,11 @@ function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: 
           {busy ? 'Adding...' : 'Add'}
         </button>
       </div>
+      {date !== todaySAST() && (
+        <p className="hub-muted hub-event-date-note">
+          This will be added to {new Date(`${date}T00:00:00+02:00`).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' })}, not today - it won't show in this list until then.
+        </p>
+      )}
       {pickerOpen && (
         <div className="hub-attendee-picker">
           {people.map((p) => (

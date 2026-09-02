@@ -62,7 +62,7 @@ export async function loginUser(input: LoginInput) {
   const email = input.email.trim().toLowerCase();
 
   const result = await pool.query(
-    'SELECT id, organization_id, email, password_hash, role FROM users WHERE email = $1',
+    'SELECT id, organization_id, email, password_hash, role FROM users WHERE email = $1 AND deleted_at IS NULL',
     [email]
   );
   const user = result.rows[0];

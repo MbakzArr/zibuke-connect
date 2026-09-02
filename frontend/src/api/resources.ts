@@ -163,12 +163,20 @@ export const channelsApi = {
     }),
   join: (id: string) =>
     apiRequest(`/api/v1/channels/${id}/join`, { method: 'POST' }),
+  // Leaving a DM is how "delete this conversation" works: it removes you
+  // from the channel's membership, so it drops out of your DM list. The
+  // other person keeps their side and their history untouched. If you
+  // message this person again later, a fresh DM channel is started.
+  leave: (id: string) =>
+    apiRequest(`/api/v1/channels/${id}/leave`, { method: 'POST' }),
   listDms: () => apiRequest<{ dms: Dm[] }>('/api/v1/channels/dm'),
   browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
   members: (channelId: string) =>
     apiRequest<{ members: ChannelMember[] }>(`/api/v1/channels/${channelId}/members`),
   markRead: (channelId: string) =>
     apiRequest(`/api/v1/channels/${channelId}/read`, { method: 'PATCH' }),
+  readStatus: (channelId: string) =>
+    apiRequest<{ otherLastReadAt: string | null }>(`/api/v1/channels/${channelId}/read-status`),
   searchPlaces: (q: string) =>
     apiRequest<{ channels: PlaceChannel[]; dms: PlaceDm[] }>(`/api/v1/channels/search?q=${encodeURIComponent(q)}`),
   openDm: (userId: string) =>
@@ -233,6 +241,35 @@ export const directoryApi = {
     linkedinUrl?: string;
     timezone?: string;
   }) => apiRequest<{ profile: FullProfile }>('/api/v1/directory/me', { method: 'PATCH', body: input }),
+};
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  deleted_at: string | null;
+  full_name: string | null;
+  job_title: string | null;
+  department_name: string | null;
+}
+
+export const adminApi = {
+  listUsers: () => apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users'),
+  createEmployee: (input: { email: string; password: string; fullName: string; jobTitle?: string; role?: string }) =>
+    apiRequest<{ user: { id: string; email: string; role: string } }>('/api/v1/admin/users', {
+      method: 'POST',
+      body: input,
+    }),
+  removeEmployee: (userId: string) =>
+    apiRequest<{ removed: boolean }>(`/api/v1/admin/users/${userId}`, { method: 'DELETE' }),
+  restoreEmployee: (userId: string) =>
+    apiRequest<{ restored: boolean }>(`/api/v1/admin/users/${userId}/restore`, { method: 'POST' }),
+  setRole: (userId: string, role: string) =>
+    apiRequest<{ user: { id: string; role: string } }>(`/api/v1/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: { role },
+    }),
 };
 
 export const notificationsApi = {

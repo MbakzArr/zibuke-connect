@@ -8,14 +8,20 @@ import { statusColor, statusLabel } from '../util/status';
 // full list is already loaded by the hub, so there's no need for a second
 // round trip). Job title and availability are shown as their own labelled
 // lines rather than folded into one string, so they're easy to scan.
+// Clicking a row opens that person's profile - same as clicking a name
+// under a channel's Members list; the Message button is a separate,
+// explicit action so it doesn't fire by accident when you meant to view
+// the profile.
 export default function PeopleDirectoryModal({
   people,
   onClose,
   onMessage,
+  onViewProfile,
 }: {
   people: Person[];
   onClose: () => void;
   onMessage: (person: Person) => void;
+  onViewProfile: (userId: string) => void;
 }) {
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
@@ -44,20 +50,22 @@ export default function PeopleDirectoryModal({
         <ul className="directory-list">
           {filtered.map((p) => (
             <li key={p.id} className="directory-row">
-              <span className="hub-dot" style={{ background: statusColor(p.status, p.availability) }} title={statusLabel(p.status, p.availability)} />
-              <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
-                {(p.full_name || '?').charAt(0).toUpperCase()}
-              </span>
-              <span className="directory-info">
-                <span className="directory-name">{p.full_name || p.email}</span>
-                <span className="directory-line">
-                  <span className="directory-jobtitle">{p.job_title || 'Job title not set'}</span>
-                  {p.department_name && <span className="directory-dept">{p.department_name}</span>}
+              <button className="directory-row-btn" onClick={() => onViewProfile(p.id)}>
+                <span className="hub-dot" style={{ background: statusColor(p.status, p.availability) }} title={statusLabel(p.status, p.availability)} />
+                <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
+                  {(p.full_name || '?').charAt(0).toUpperCase()}
                 </span>
-                <span className={`directory-availability directory-availability--${p.status === 'online' ? (p.availability || 'available') : 'offline'}`}>
-                  {statusLabel(p.status, p.availability)}
+                <span className="directory-info">
+                  <span className="directory-name">{p.full_name || p.email}</span>
+                  <span className="directory-line">
+                    <span className="directory-jobtitle">{p.job_title || 'Job title not set'}</span>
+                    {p.department_name && <span className="directory-dept">{p.department_name}</span>}
+                  </span>
+                  <span className={`directory-availability directory-availability--${p.status === 'online' ? (p.availability || 'available') : 'offline'}`}>
+                    {statusLabel(p.status, p.availability)}
+                  </span>
                 </span>
-              </span>
+              </button>
               <button className="directory-msg" onClick={() => onMessage(p)}>Message</button>
             </li>
           ))}

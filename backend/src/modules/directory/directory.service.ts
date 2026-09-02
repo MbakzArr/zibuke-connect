@@ -30,6 +30,7 @@ export async function searchDirectory(organizationId: string, query: string, lim
      LEFT JOIN employee_profiles p ON p.user_id = u.id
      LEFT JOIN departments d ON d.id = u.department_id
      WHERE u.organization_id = $1
+       AND u.deleted_at IS NULL
        AND (
          p.full_name ILIKE $2
          OR p.job_title ILIKE $2
@@ -69,6 +70,7 @@ export async function listDirectory(
      LEFT JOIN employee_profiles p ON p.user_id = u.id
      LEFT JOIN departments d ON d.id = u.department_id
      WHERE u.organization_id = $1
+       AND u.deleted_at IS NULL
        ${departmentFilter}
      ORDER BY p.full_name ASC
      LIMIT ${limitParam} OFFSET ${offsetParam}`,
@@ -142,6 +144,7 @@ export async function birthdaysToday(organizationId: string) {
      JOIN employee_profiles p ON p.user_id = u.id
      LEFT JOIN departments d ON d.id = u.department_id
      WHERE u.organization_id = $1
+       AND u.deleted_at IS NULL
        AND p.date_of_birth IS NOT NULL
        AND EXTRACT(MONTH FROM p.date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
        AND EXTRACT(DAY FROM p.date_of_birth) = EXTRACT(DAY FROM CURRENT_DATE)

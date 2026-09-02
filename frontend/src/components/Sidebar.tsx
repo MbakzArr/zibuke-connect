@@ -17,6 +17,8 @@ interface SidebarProps {
   // a stray tap on the channel list never triggers one by accident.
   onNewAnnouncement?: () => void;
   showAnnouncementAction?: boolean;
+  // Delete (leave) a DM conversation - removes it from your list only.
+  onDeleteDm?: (channelId: string, personName: string) => void;
 }
 
 // Left rail: Company Hub, the channel list, and a SEPARATE Direct Messages
@@ -31,6 +33,7 @@ export default function Sidebar({
   dmRefreshKey,
   onNewAnnouncement,
   showAnnouncementAction,
+  onDeleteDm,
 }: SidebarProps) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [dms, setDms] = useState<Dm[]>([]);
@@ -170,16 +173,30 @@ export default function Sidebar({
         <ul className="side-list">
           {dms.map((dm) => {
             const hasUnread = unreadDmChannelIds.has(dm.channel_id) && activeView !== dm.channel_id;
+            const label = (dm.full_name || 'Direct message') + (dm.is_self ? ' (you)' : '');
             return (
-              <li key={dm.channel_id} className="side-list-item">
+              <li key={dm.channel_id} className="side-list-item side-dm-row">
                 <button
-                  className={`side-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
-                  onClick={() => onSelectDm(dm.channel_id, (dm.full_name || 'Direct message') + (dm.is_self ? ' (you)' : ''), dm.user_id)}
+                  className={`side-item side-dm-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
+                  onClick={() => onSelectDm(dm.channel_id, label, dm.user_id)}
                 >
                   <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
                   <span className="side-dm-name">{dm.full_name || 'Unknown'}{dm.is_self ? ' (you)' : ''}</span>
                   {hasUnread && <span className="side-unread-dot" />}
                 </button>
+                {onDeleteDm && !dm.is_self && (
+                  <button
+                    className="side-dm-delete"
+                    title={`Delete conversation with ${dm.full_name || 'this person'}`}
+                    aria-label={`Delete conversation with ${dm.full_name || 'this person'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteDm(dm.channel_id, label);
+                    }}
+                  >
+                    🗑
+                  </button>
+                )}
               </li>
             );
           })}

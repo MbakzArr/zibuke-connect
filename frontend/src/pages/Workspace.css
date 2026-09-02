@@ -81,10 +81,23 @@
 }
 .side-list { list-style: none; margin: 0; padding: 0; }
 .side-empty { padding: 8px 10px; font-size: 13px; color: var(--ink-faint); }
-/* A faint divider between channel/DM rows so adjacent items read as
-   separate click targets instead of one dense block - easy to fat-finger
-   the wrong one otherwise. No line under the last row in each list. */
-.side-list-item:not(:last-child) { border-bottom: 1px solid var(--surface-3); }
+/* A divider between channel/DM rows so adjacent items read as separate
+   click targets instead of one dense block. A plain grey hairline (var(
+   --surface-3)) turned out to sit almost exactly on the sidebar's own
+   background and vanished - this uses a faint indigo tint instead, which
+   reads clearly against --surface-2 while still staying quiet, and ties
+   the divider to the app's actual accent color rather than a random grey. */
+.side-list-item:not(:last-child) { border-bottom: 1px solid rgba(79, 70, 229, 0.16); }
+
+/* DM row: the nav button plus a hover-reveal delete action, side by side. */
+.side-dm-row { display: flex; align-items: center; gap: 2px; }
+.side-dm-item { flex: 1; min-width: 0; }
+.side-dm-delete {
+  flex-shrink: 0; opacity: 0; border: none; background: transparent;
+  width: 26px; height: 26px; border-radius: 6px; font-size: 12px; color: var(--ink-faint);
+}
+.side-dm-row:hover .side-dm-delete { opacity: 1; }
+.side-dm-delete:hover { background: #fee2e2; color: var(--danger); }
 
 /* ---- Quick actions strip: visually boxed off from the nav lists above
    and below it, so it never gets mistaken for a channel/DM row. ---- */
@@ -127,12 +140,14 @@
 /* A message row. Others align left, your own align right. */
 .row { display: flex; gap: var(--sp-3); padding: var(--sp-1) 0; align-items: flex-start; }
 .row-mine { flex-direction: row-reverse; }
-.row-grouped { padding-top: 0; }
+.row-grouped { padding-top: 1px; }
 
 .msg-avatar {
   flex-shrink: 0; width: 34px; height: 34px; border-radius: 8px;
   color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 14px;
 }
+.msg-avatar-btn { border: none; padding: 0; }
+.msg-avatar-btn:hover { outline: 2px solid var(--indigo-600); outline-offset: 1px; }
 .msg-avatar-spacer { width: 34px; flex-shrink: 0; }
 
 .bubble-wrap { min-width: 0; max-width: 68%; display: flex; flex-direction: column; }
@@ -141,7 +156,13 @@
 .msg-meta { display: flex; align-items: baseline; gap: var(--sp-2); margin-bottom: 3px; }
 .msg-meta.meta-mine { flex-direction: row-reverse; }
 .msg-author { font-weight: 600; font-size: 13px; }
+.msg-author-btn { border: none; background: transparent; padding: 0; color: var(--ink); }
+.msg-author-btn:hover { color: var(--indigo-700); text-decoration: underline; }
 .msg-time { font-size: 11px; color: var(--ink-faint); }
+.msg-time-grouped {
+  font-size: 10px; color: var(--ink-faint); margin-bottom: 2px; display: block;
+}
+.msg-time-grouped-mine { text-align: right; }
 .msg-edited { font-size: 11px; color: var(--ink-faint); font-style: italic; }
 
 .bubble {
@@ -155,6 +176,11 @@
 .bubble.is-deleted { background: transparent; color: var(--ink-faint); font-style: italic; padding-left: 0; padding-right: 0; }
 
 .chan-typing { height: 20px; padding: 0 var(--sp-5); font-size: 12px; color: var(--ink-faint); font-style: italic; }
+
+/* ---- Sent/Seen tick (DM only, latest own message) ---- */
+.msg-status { display: block; margin-top: 2px; font-size: 11px; text-align: right; }
+.msg-status-sent { color: var(--ink-faint); }
+.msg-status-seen { color: var(--indigo-600); font-weight: 600; }
 
 .chan-composer {
   padding: var(--sp-4) var(--sp-5);
@@ -318,6 +344,8 @@
   .ws-account-name { display: none; }
   .hub { padding: var(--sp-4); }
   .hub-greeting { font-size: 22px; }
+  /* No hover on touch, so the delete-DM action needs to just be visible. */
+  .side-dm-delete { opacity: 1; }
 }
 
 /* Dimmed backdrop behind the mobile sidebar overlay, tapping it closes the
@@ -452,6 +480,10 @@
   background: rgba(255,255,255,0.6); flex: 1 1 240px; min-width: 240px;
 }
 .hub-bday-name { font-size: 14px; font-weight: 600; }
+.hub-bday-name-btn { border: none; background: transparent; padding: 0; color: var(--ink); text-align: left; }
+.hub-bday-name-btn:hover { color: var(--indigo-700); text-decoration: underline; }
+.hub-bday-identity { border: none; background: transparent; padding: 0; border-radius: 7px; flex-shrink: 0; }
+.hub-bday-identity:hover .hub-avatar { outline: 2px solid var(--indigo-600); outline-offset: 1px; }
 .hub-bday-note { font-size: 12px; color: var(--away); }
 
 /* Your channels card */
@@ -854,6 +886,10 @@
 .hub-event-form input[type="time"] {
   padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px;
 }
+.hub-event-form input[type="date"] {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px;
+}
+.hub-event-date-note { margin: 6px 0 0; font-size: 12px; }
 
 /* ---- Colored hero card ---- */
 .hub-hero-card {
@@ -954,6 +990,7 @@
      input take the full row instead of running off the right edge. */
   .hub-event-form { flex-wrap: wrap; }
   .hub-event-form input[type="text"], .hub-event-form input:not([type]),
+  .hub-event-form input[type="date"],
   .hub-event-form .hub-event-venue {
     width: 100%;
   }
@@ -1002,8 +1039,12 @@
 
 /* ---- Directory modal ---- */
 .directory-list { list-style: none; margin: 0; padding: var(--sp-2); max-height: 60vh; overflow-y: auto; }
-.directory-row { display: flex; align-items: center; gap: var(--sp-3); padding: 10px 8px; border-radius: var(--radius-sm); }
-.directory-row:hover { background: var(--surface-2); }
+.directory-row { display: flex; align-items: center; gap: var(--sp-3); padding: 4px 8px; border-radius: var(--radius-sm); }
+.directory-row-btn {
+  display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 0;
+  border: none; background: transparent; text-align: left; padding: 6px 0; border-radius: var(--radius-sm);
+}
+.directory-row-btn:hover { background: var(--surface-2); }
 .directory-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
 .directory-name { font-size: 14px; font-weight: 600; color: var(--ink); }
 .directory-role { font-size: 12px; color: var(--ink-faint); }
@@ -1092,3 +1133,48 @@
 .evt-item-compact .evt-main { padding-right: 36px; }
 .evt-item-compact .evt-expanded { margin-left: 0; }
 .mini-cal-event-list { list-style: none; margin: 0; padding: 0; }
+
+/* ---- Admin panel: manage employees ---- */
+.admin-panel-body { padding: var(--sp-5); }
+.admin-panel-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--sp-4);
+}
+.admin-add-form {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-4); margin-bottom: var(--sp-4);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.admin-add-form input, .admin-add-form select {
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px;
+}
+.admin-user-list { list-style: none; margin: 0; padding: 0; max-height: 55vh; overflow-y: auto; }
+.admin-user-row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 10px 4px; border-bottom: 1px solid var(--surface-3);
+}
+.admin-user-row:last-child { border-bottom: none; }
+.admin-user-row.is-removed { opacity: 0.55; }
+.admin-user-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
+.admin-user-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.admin-user-removed-tag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--danger); background: #fee2e2; padding: 1px 7px; border-radius: 8px;
+}
+.admin-user-meta { font-size: 12px; color: var(--ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.admin-role-select {
+  flex-shrink: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--ink-soft); background: var(--surface);
+}
+.admin-remove-btn, .admin-restore-btn {
+  flex-shrink: 0; padding: 6px 12px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; border: none;
+}
+.admin-remove-btn { background: #fee2e2; color: var(--danger); }
+.admin-remove-btn:hover { background: #fecaca; }
+.admin-restore-btn { background: var(--indigo-50); color: var(--indigo-700); }
+.admin-restore-btn:hover { background: var(--indigo-100, #e0e7ff); }
+
+@media (max-width: 720px) {
+  .admin-user-row { flex-wrap: wrap; }
+  .admin-role-select { margin-left: 42px; }
+}

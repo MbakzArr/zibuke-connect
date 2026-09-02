@@ -32,6 +32,10 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [showMembers, setShowMembers] = useState(false);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [dmStatus, setDmStatus] = useState<{ status: string; availability: string | null } | null>(null);
+  // When did the OTHER person in this DM last read it - drives the
+  // Sent/Seen tick on your own most recent message. Only meaningful for a
+  // 1:1 DM, not a group channel (there's no single "seen by" there).
+  const [otherReadAt, setOtherReadAt] = useState<string | null>(null);
 
   // Fetch the other person's live status when a DM is opened, so the header
   // shows a real "Available"/"Busy"/"Away"/"Offline" instead of nothing.
@@ -88,18 +92,47 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
       }
     }
     load();
-    // Mark it read on the server so its unread badge clears in the sidebar.
-    // DMs use a separate read-tracking path (notifications), so only do this
-    // for real channels.
-    if (!dmTitle) {
-      channelsApi.markRead(channel.id).catch(() => {
-        // best-effort; a failed mark-read just leaves the badge showing
-      });
-    }
+    // Mark it read on the server (updates channel_reads, which is also
+    // what the "Seen" tick on the OTHER person's screen reads from).
+    channelsApi.markRead(channel.id).catch(() => {
+      // best-effort; a failed mark-read just leaves the badge showing
+    });
     return () => {
       cancelled = true;
     };
   }, [channel.id]);
+
+  // For a DM, load who last read it (for the Sent/Seen tick), then keep it
+  // live via the socket - the moment the other person opens this
+  // conversation, your last message should flip to "Seen" without a reload.
+  useEffect(() => {
+    if (!dmTitle) {
+      setOtherReadAt(null);
+      return;
+    }
+    let cancelled = false;
+    channelsApi.readStatus(channel.id).then((d) => {
+      if (!cancelled) setOtherReadAt(d.otherLastReadAt);
+    }).catch(() => {
+      // best-effort; ticks just won't show if this fails
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [channel.id, dmTitle]);
+
+  useEffect(() => {
+    if (!socket) return;
+    function onRead(p: { channelId: string; userId: string; lastReadAt: string }) {
+      if (p.channelId === channel.id && p.userId !== user?.id) {
+        setOtherReadAt(p.lastReadAt);
+      }
+    }
+    socket.on('channel:read', onRead);
+    return () => {
+      socket.off('channel:read', onRead);
+    };
+  }, [socket, channel.id, user?.id]);
 
   // Join the channel's live room and subscribe to new messages + typing.
   useEffect(() => {
@@ -367,7 +400,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
       </header>
 
       <div className="chan-messages" ref={messagesRef}>
-        {messages.map((m, i) => {
+        {(() => {
+          // Only the most recent message YOU sent gets a Sent/Seen tick,
+          // WhatsApp-style - not every message, that would be noisy. Only
+          // meaningful in a 1:1 DM, where "seen by" is unambiguous.
+          const lastMineIndex = dmTitle
+            ? messages.reduce((acc, m, idx) => (m.user_id === user?.id ? idx : acc), -1)
+            : -1;
+          return messages.map((m, i) => {
           const mine = m.user_id === user?.id;
           // Group consecutive messages from the same person: hide the
           // avatar and name on follow-on messages so a run reads as one block.
@@ -380,21 +420,35 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
               className={`row ${mine ? 'row-mine' : 'row-theirs'} ${grouped ? 'row-grouped' : ''}`}
             >
               {!mine && !grouped ? (
-                <div className="msg-avatar" style={{ background: colorFor(m.user_id) }}>
+                <button className="msg-avatar msg-avatar-btn" style={{ background: colorFor(m.user_id) }} onClick={() => setProfileUserId(m.user_id)} title="View profile">
                   {(m.sender_name || '?').charAt(0).toUpperCase()}
-                </div>
+                </button>
               ) : (
                 <div className="msg-avatar-spacer" />
               )}
               <div className="bubble-wrap">
-                {!grouped && (
+                {!grouped ? (
                   <div className={`msg-meta ${mine ? 'meta-mine' : ''}`}>
-                    <span className="msg-author">{mine ? 'You' : m.sender_name || 'Unknown'}</span>
+                    {mine ? (
+                      <span className="msg-author">You</span>
+                    ) : (
+                      <button className="msg-author msg-author-btn" onClick={() => setProfileUserId(m.user_id)}>
+                        {m.sender_name || 'Unknown'}
+                      </button>
+                    )}
                     <span className="msg-time">
                       {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                     {m.edited_at && <span className="msg-edited">edited</span>}
                   </div>
+                ) : (
+                  // Grouped follow-on messages skip the full author/time
+                  // header, but every individual message still gets its
+                  // own timestamp - just a smaller, quieter one.
+                  <span className={`msg-time-grouped ${mine ? 'msg-time-grouped-mine' : ''}`}>
+                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {m.edited_at && ' · edited'}
+                  </span>
                 )}
                 {editingId === m.id ? (
                   <div className="bubble-edit">
@@ -432,10 +486,21 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
                     <Reactions targetType="message" targetId={m.id} initial={msgReactions[m.id]} />
                   </div>
                 )}
+                {/* Sent/Seen tick - only on your own latest message in a DM. */}
+                {i === lastMineIndex && (
+                  <span className="msg-status">
+                    {otherReadAt && new Date(otherReadAt) >= new Date(m.created_at) ? (
+                      <span className="msg-status-seen">✓✓ Seen</span>
+                    ) : (
+                      <span className="msg-status-sent">✓ Sent</span>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
           );
-        })}
+          });
+        })()}
         {messages.length === 0 && (
           <div className="chan-empty">
             No messages yet. Say something to start the conversation.

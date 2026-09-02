@@ -12,6 +12,7 @@ import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
 import NewAnnouncementModal from '../components/NewAnnouncementModal';
+import AdminPanel from '../components/AdminPanel';
 import ProfileModal from '../components/ProfileModal';
 import EventDetailModal from '../components/EventDetailModal';
 import { channelsApi, announcementsApi, directoryApi, usersApi, type Channel, type Person, type Announcement } from '../api/resources';
@@ -77,12 +78,16 @@ export default function Workspace() {
   const [showBrowse, setShowBrowse] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   // Bumped after posting an announcement from the sidebar quick action, so
   // the hub (if already mounted) remounts and picks it up on next visit
   // instead of showing a stale list until a manual refresh.
   const [hubKey, setHubKey] = useState(0);
   const [dmRefreshKey, setDmRefreshKey] = useState(0);
   const isAdmin = user?.role === 'admin' || user?.role === 'department_admin';
+  // Employee management is full-admin only, stricter than the announcement
+  // quick action - matches the backend's requireAdmin guard exactly.
+  const isFullAdmin = user?.role === 'admin';
 
   useEffect(() => {
     if (!socket) return;
@@ -144,6 +149,25 @@ export default function Workspace() {
     pushHistory({ view: 'hub' });
   }
 
+  // Delete (leave) a DM conversation - removes it from just your side. The
+  // other person's copy and history are untouched; if you message them
+  // again, a fresh DM channel starts since this one now has only one member.
+  async function deleteDm(channelId: string, personName: string) {
+    if (!window.confirm(`Delete your conversation with ${personName}? This can't be undone on your side.`)) {
+      return;
+    }
+    try {
+      await channelsApi.leave(channelId);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    if (activeChannel?.id === channelId) {
+      openHub();
+    }
+    setDmRefreshKey((k) => k + 1);
+  }
+
   // Open a DM by its existing channel id (from the sidebar list).
   function openDmByChannel(channelId: string, personName: string, userId?: string) {
     clearDmUnread(channelId);
@@ -164,8 +188,7 @@ export default function Workspace() {
 
   // Open a DM with a person (from search results). Uses the DM endpoint,
   // which reuses an existing conversation.
-  async function openDmWithPerson(person: Person) {
-    try {
+  async function openDmWithPerson(person: Person) {    try {
       const { channel } = await channelsApi.openDm(person.id);
       onDmOpened(channel, person.full_name || person.email, person.id);
     } catch (err) {
@@ -188,8 +211,7 @@ export default function Workspace() {
   // Called when a notification is clicked. We only have the channel id, so
   // fetch its details (or fall back to a minimal channel) and open it. For a
   // DM we resolve the other person's name for the title.
-  async function navigateToChannel(channelId: string) {
-    // Check the user's DMs first, so a DM notification opens with the right title.
+  async function navigateToChannel(channelId: string) {    // Check the user's DMs first, so a DM notification opens with the right title.
     try {
       const { dms } = await channelsApi.listDms();
       const dm = dms.find((d) => d.channel_id === channelId);
@@ -325,6 +347,17 @@ export default function Workspace() {
                   >
                     👤 View profile
                   </button>
+                  {isFullAdmin && (
+                    <button
+                      className="ws-account-menu-item"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        setShowAdminPanel(true);
+                      }}
+                    >
+                      ⚙ Manage employees
+                    </button>
+                  )}
                   <button className="ws-account-menu-item ws-account-menu-danger" onClick={logout}>
                     ⎋ Sign out
                   </button>
@@ -379,6 +412,7 @@ export default function Workspace() {
               dmRefreshKey={dmRefreshKey}
               showAnnouncementAction={isAdmin}
               onNewAnnouncement={() => setShowNewAnnouncement(true)}
+              onDeleteDm={deleteDm}
             />
             <div className="ws-resize-handle" onMouseDown={startResize} title="Drag to resize" />
           </div>
@@ -455,6 +489,8 @@ export default function Workspace() {
           }}
         />
       )}
+      {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
+
       {showNewAnnouncement && (
         <NewAnnouncementModal
           onClose={() => setShowNewAnnouncement(false)}

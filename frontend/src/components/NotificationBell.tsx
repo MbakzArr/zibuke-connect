@@ -81,6 +81,17 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
         clickable: false,
       };
     }
+    if (n.type === 'task_assigned') {
+      return {
+        title: `New task: ${n.task_title || 'Untitled task'}`,
+        preview: n.task_due_date
+          ? `Due ${new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'short' }).format(new Date(n.task_due_date))}`
+          : null,
+        // Same reasoning as department_head - nothing to deep-link into
+        // yet (tasks live in a hub widget, not their own page).
+        clickable: false,
+      };
+    }
     return { title: 'Notification', preview: null, clickable: false };
   }
 

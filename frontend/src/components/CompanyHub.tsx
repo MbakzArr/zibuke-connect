@@ -6,6 +6,7 @@ import {
   reactionsApi,
   messagesApi,
   eventsApi,
+  tasksApi,
   type Announcement,
   type Person,
   type Birthday,
@@ -16,6 +17,7 @@ import {
 } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import { statusColor, statusLabel } from '../util/status';
 import Reactions from './Reactions';
@@ -24,6 +26,7 @@ import PeopleDirectoryModal from './PeopleDirectoryModal';
 import ProfileModal from './ProfileModal';
 import EventListItem from './EventListItem';
 import AnnouncementScopePicker from './AnnouncementScopePicker';
+import TasksWidget from './TasksWidget';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
@@ -63,6 +66,7 @@ function timeAgo(iso: string): string {
 export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConversation, onBrowseChannels, myName, myAvailability }: CompanyHubProps) {
   const { user } = useAuth();
   const socket = useSocket();
+  const { showToast } = useToast();
 
   // Live availability updates: when anyone changes their status, patch it
   // into the people list in place, so People Online reflects it without a
@@ -133,6 +137,27 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
       { label: 'Channels', run: async () => setChannels((await channelsApi.list()).channels) },
       { label: 'Recent conversations', run: async () => setRecent((await messagesApi.recent()).conversations) },
       { label: "Your day", run: async () => setEvents((await eventsApi.today()).events) },
+      {
+        // The "reminder" - no background job exists in this app, so this
+        // is computed fresh every time the hub loads instead. Only fires
+        // once per mount (not per re-render), and stays quiet if nothing's
+        // actually due - a reminder that fires constantly stops meaning
+        // anything.
+        label: 'Task reminders',
+        run: async () => {
+          const d = await tasksApi.dueSoon();
+          if (d.tasks.length === 0) return;
+          const overdueCount = d.tasks.filter((t) => t.due_date && t.due_date < todaySAST()).length;
+          const dueTodayCount = d.tasks.length - overdueCount;
+          const parts: string[] = [];
+          if (overdueCount > 0) parts.push(`${overdueCount} overdue`);
+          if (dueTodayCount > 0) parts.push(`${dueTodayCount} due today`);
+          showToast(`You have ${parts.join(' and ')} task${d.tasks.length === 1 ? '' : 's'}.`, {
+            type: overdueCount > 0 ? 'error' : 'info',
+            durationMs: 8000,
+          });
+        },
+      },
     ];
 
     Promise.allSettled(sections.map((s) => s.run())).then((results) => {
@@ -341,6 +366,8 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
               ))}
             </ul>
           </div>
+
+          <TasksWidget people={people} />
         </div>
 
         {/* Right column: People online, Your channels, Recent conversations -

@@ -2,10 +2,23 @@ import { Request, Response } from 'express';
 import { pool } from '../../db/pool';
 import { listAnnouncements, createAnnouncement, getAnnouncement } from './announcements.service';
 
+// What a viewer is allowed to see: undefined for a full admin (no filter -
+// they see every announcement in the org), otherwise their own
+// department_id (which may itself be null, meaning "not in a department,
+// so only org-wide announcements"). This is deliberately never taken from
+// the request - it's always looked up fresh from who's actually asking,
+// so there's no query param or body field a client could use to see
+// another department's announcements.
+async function getViewerScope(req: Request): Promise<string | null | undefined> {
+  if (req.user!.role === 'admin') return undefined;
+  const self = await pool.query('SELECT department_id FROM users WHERE id = $1', [req.user!.userId]);
+  return self.rows[0]?.department_id ?? null;
+}
+
 export async function list(req: Request, res: Response) {
   try {
-    const departmentId = req.query.departmentId ? String(req.query.departmentId) : null;
-    const announcements = await listAnnouncements(req.user!.organizationId, departmentId);
+    const scope = await getViewerScope(req);
+    const announcements = await listAnnouncements(req.user!.organizationId, scope);
     return res.json({ announcements });
   } catch (err) {
     console.error('List announcements error:', err);
@@ -31,12 +44,9 @@ export async function create(req: Request, res: Response) {
 
     // A department_admin can only ever post to THEIR OWN department, never
     // org-wide and never someone else's - a full admin is the only role
-    // that can do either of those. department_id isn't in the JWT (adding
-    // it there would mean re-issuing every token whenever someone's
-    // department changes), so it's looked up fresh here instead.
+    // that can do either of those.
     if (req.user!.role === 'department_admin') {
-      const self = await pool.query('SELECT department_id FROM users WHERE id = $1', [req.user!.userId]);
-      const ownDepartmentId = self.rows[0]?.department_id || null;
+      const ownDepartmentId = await getViewerScope(req);
       if (!ownDepartmentId) {
         return res.status(400).json({ error: "You're not assigned to a department yet, so there's nothing to post an announcement to. Ask an admin to assign you one." });
       }
@@ -65,7 +75,8 @@ export async function create(req: Request, res: Response) {
 
 export async function getOne(req: Request, res: Response) {
   try {
-    const ann = await getAnnouncement(req.user!.organizationId, req.params.id);
+    const scope = await getViewerScope(req);
+    const ann = await getAnnouncement(req.user!.organizationId, req.params.id, scope);
     if (!ann) return res.status(404).json({ error: 'Announcement not found' });
     return res.json({ announcement: ann });
   } catch (err) {

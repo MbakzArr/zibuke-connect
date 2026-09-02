@@ -82,6 +82,8 @@ export interface Notification {
   event_starts_at?: string | null;
   event_venue?: string | null;
   department_name?: string | null;
+  task_title?: string | null;
+  task_due_date?: string | null;
 }
 
 
@@ -331,6 +333,35 @@ export const adminApi = {
       method: 'PATCH',
       body: { newPassword },
     }),
+};
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  status: 'open' | 'done';
+  assigned_to: string;
+  assigned_by: string;
+  created_at: string;
+  completed_at: string | null;
+  assignee_name: string | null;
+  assigner_name: string | null;
+}
+
+export const tasksApi = {
+  create: (input: { title: string; description?: string; assignedTo: string; dueDate?: string }) =>
+    apiRequest<{ task: Task }>('/api/v1/tasks', { method: 'POST', body: input }),
+  mine: () => apiRequest<{ tasks: Task[] }>('/api/v1/tasks/mine'),
+  assignedByMe: () => apiRequest<{ tasks: Task[] }>('/api/v1/tasks/assigned-by-me'),
+  monthDates: (year: number, month: number) =>
+    apiRequest<{ dates: string[] }>(`/api/v1/tasks/month?year=${year}&month=${month}`),
+  dueSoon: () => apiRequest<{ tasks: Task[] }>('/api/v1/tasks/due-soon'),
+  setStatus: (id: string, status: 'open' | 'done') =>
+    apiRequest<{ task: Task }>(`/api/v1/tasks/${id}/status`, { method: 'PATCH', body: { status } }),
+  update: (id: string, fields: { title?: string; description?: string; dueDate?: string | null; assignedTo?: string }) =>
+    apiRequest<{ task: Task }>(`/api/v1/tasks/${id}`, { method: 'PATCH', body: fields }),
+  remove: (id: string) => apiRequest<{ deleted: boolean }>(`/api/v1/tasks/${id}`, { method: 'DELETE' }),
 };
 
 export const notificationsApi = {

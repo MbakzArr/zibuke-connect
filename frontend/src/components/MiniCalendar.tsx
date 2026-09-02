@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
-import { eventsApi, type Event } from '../api/resources';
+import { eventsApi, tasksApi, type Event, type Task } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
 import EventListItem from './EventListItem';
 
-// A simple month-grid calendar for the sidebar. Shows today highlighted and
-// a dot on any day that has at least one real event (from the events API,
-// not mocked). Clicking a day shows that day's events inline below the
-// grid - no navigation, no new page, kept deliberately light.
+// A simple month-grid calendar for the sidebar. Shows today highlighted, an
+// amber dot on any day with a real event, and a small blue square on any
+// day one of your own tasks is due (from the events/tasks APIs, not
+// mocked). Clicking a day shows both inline below the grid - no
+// navigation, no new page, kept deliberately light.
 export default function MiniCalendar() {
   const { user } = useAuth();
   const [cursor, setCursor] = useState(() => new Date());
   const [eventDates, setEventDates] = useState<Set<string>>(new Set());
+  const [taskDates, setTaskDates] = useState<Set<string>>(new Set());
+  // All of my tasks, fetched once - small enough for a demo that filtering
+  // client-side by due date beats a dedicated per-day endpoint.
+  const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
   const [loadingDay, setLoadingDay] = useState(false);
@@ -24,7 +29,12 @@ export default function MiniCalendar() {
 
   useEffect(() => {
     eventsApi.monthDates(year, month + 1).then((d) => setEventDates(new Set(d.dates)));
+    tasksApi.monthDates(year, month + 1).then((d) => setTaskDates(new Set(d.dates)));
   }, [year, month]);
+
+  useEffect(() => {
+    tasksApi.mine().then((d) => setMyTasks(d.tasks));
+  }, []);
 
   const first = new Date(year, month, 1);
   const startWeekday = first.getDay(); // 0=Sun
@@ -38,6 +48,8 @@ export default function MiniCalendar() {
   function dateStr(day: number) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
+
+  const selectedTasks = selectedDate ? myTasks.filter((t) => t.due_date === selectedDate) : [];
 
   async function pickDay(day: number) {
     const ds = dateStr(day);
@@ -73,6 +85,17 @@ export default function MiniCalendar() {
     }
   }
 
+  async function toggleTaskDone(task: Task) {
+    const nextStatus = task.status === 'done' ? 'open' : 'done';
+    const { task: updated } = await tasksApi.setStatus(task.id, nextStatus);
+    setMyTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)));
+    if (nextStatus === 'done' && selectedDate) {
+      // If this was the last open task due that day, drop the square dot.
+      const stillOpen = myTasks.some((t) => t.id !== task.id && t.due_date === selectedDate && t.status === 'open');
+      if (!stillOpen) setTaskDates((prev) => { const next = new Set(prev); next.delete(selectedDate); return next; });
+    }
+  }
+
   const monthLabel = new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric' }).format(cursor);
 
   return (
@@ -98,7 +121,10 @@ export default function MiniCalendar() {
               onClick={() => pickDay(day)}
             >
               {day}
-              {eventDates.has(dateStr(day)) && <span className="mini-cal-dot" />}
+              <span className="mini-cal-dot-row">
+                {eventDates.has(dateStr(day)) && <span className="mini-cal-dot" title="Event" />}
+                {taskDates.has(dateStr(day)) && <span className="mini-cal-task-dot" title="Task due" />}
+              </span>
             </button>
           )
         )}
@@ -109,7 +135,21 @@ export default function MiniCalendar() {
             <p className="hub-muted">Loading…</p>
           ) : (
             <>
-              {selectedEvents.length === 0 && !addingOn && <p className="hub-muted">Nothing scheduled.</p>}
+              {selectedEvents.length === 0 && selectedTasks.length === 0 && !addingOn && (
+                <p className="hub-muted">Nothing scheduled.</p>
+              )}
+              {selectedTasks.length > 0 && (
+                <ul className="mini-cal-task-list">
+                  {selectedTasks.map((t) => (
+                    <li key={t.id} className={`mini-cal-task-row ${t.status === 'done' ? 'is-done' : ''}`}>
+                      <label>
+                        <input type="checkbox" checked={t.status === 'done'} onChange={() => toggleTaskDone(t)} />
+                        {t.title}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
               <ul className="mini-cal-event-list">
                 {selectedEvents.map((e) => (
                   <EventListItem

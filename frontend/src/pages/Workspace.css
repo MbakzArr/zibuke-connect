@@ -964,11 +964,13 @@
 .hub-card--teal { border-left: 3px solid #0d9488; }
 .hub-card--violet { border-left: 3px solid #7c3aed; }
 .hub-card--blue { border-left: 3px solid #0891b2; }
+.hub-card--rose { border-left: 3px solid #e11d48; }
 
 .hub-card--indigo .hub-card-head h3::before { content: '📢 '; }
 .hub-card--green .hub-card-head h3::before { content: '🟢 '; }
 .hub-card--violet .hub-card-head h3::before { content: '💬 '; }
 .hub-card--teal .hub-card-head h3::before { content: ''; }
+.hub-card--rose .hub-card-head h3::before { content: ''; }
 
 /* ---- Sidebar mini calendar ---- */
 .mini-cal { padding: 4px 2px; }
@@ -993,7 +995,6 @@
 .mini-cal-cell.is-today { background: var(--indigo-600); color: #fff; font-weight: 700; }
 .mini-cal-cell.is-selected:not(.is-today) { background: var(--indigo-50); color: var(--indigo-700); font-weight: 600; }
 .mini-cal-dot {
-  position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
   width: 4px; height: 4px; border-radius: 50%; background: #d97706;
 }
 .mini-cal-cell.is-today .mini-cal-dot { background: #fff; }
@@ -1266,3 +1267,55 @@
   .chan-members-btn::before { content: '👥'; font-size: 15px; }
   .chan-leave-btn::before { content: '🚪'; font-size: 15px; }
 }
+
+/* ---- Tasks widget (hub) ---- */
+.hub-task-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  background: #e11d48; color: #fff; font-size: 11px; font-weight: 700; border-radius: 9px;
+}
+.hub-task-tabs { display: flex; gap: 4px; margin: 2px 0 var(--sp-3); }
+.hub-task-tab {
+  padding: 5px 12px; border: none; background: var(--surface-2); border-radius: 14px;
+  font-size: 12px; font-weight: 600; color: var(--ink-faint);
+}
+.hub-task-tab.is-active { background: #e11d48; color: #fff; }
+.hub-task-assign-form {
+  display: flex; flex-direction: column; gap: var(--sp-2); margin-bottom: var(--sp-4);
+  padding: var(--sp-3); background: var(--surface-2); border-radius: var(--radius-sm);
+}
+.hub-task-assign-form input, .hub-task-assign-form textarea, .hub-task-assign-form select {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; resize: vertical;
+}
+.hub-task-assign-row { display: flex; gap: var(--sp-2); }
+.hub-task-assign-row select { flex: 1; min-width: 0; }
+.hub-task-assign-row input[type="date"] { flex-shrink: 0; }
+
+.hub-task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.hub-task-row {
+  display: flex; align-items: flex-start; gap: var(--sp-2); padding: 7px 4px; border-radius: var(--radius-sm);
+}
+.hub-task-row:hover { background: var(--surface-2); }
+.hub-task-row.is-done .hub-task-title { text-decoration: line-through; color: var(--ink-faint); }
+.hub-task-check { padding-top: 2px; }
+.hub-task-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
+.hub-task-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+.hub-task-meta { display: flex; gap: 8px; font-size: 11px; color: var(--ink-faint); flex-wrap: wrap; }
+.hub-task-due.is-overdue { color: var(--danger); font-weight: 700; }
+.hub-task-due.is-today { color: #d97706; font-weight: 700; }
+.hub-task-delete {
+  flex-shrink: 0; border: none; background: transparent; padding: 4px 6px; border-radius: 6px;
+  font-size: 12px; opacity: 0; transition: opacity 0.12s;
+}
+.hub-task-row:hover .hub-task-delete { opacity: 1; }
+.hub-task-delete:hover { background: #fee2e2; }
+
+/* ---- Task due-dates on the sidebar mini calendar ---- */
+.mini-cal-dot-row { position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); display: flex; gap: 3px; }
+.mini-cal-task-dot { width: 5px; height: 5px; border-radius: 1px; background: #e11d48; display: inline-block; }
+.mini-cal-cell.is-today .mini-cal-task-dot { background: #fff; }
+.mini-cal-task-list { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.mini-cal-task-row { font-size: 12px; padding: 3px 4px; border-radius: 6px; }
+.mini-cal-task-row:hover { background: var(--surface-2); }
+.mini-cal-task-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.mini-cal-task-row.is-done label { text-decoration: line-through; color: var(--ink-faint); }

@@ -14,12 +14,18 @@ interface CreateAnnouncementInput {
   createdBy: string;
 }
 
-export async function listAnnouncements(organizationId: string, departmentId?: string | null) {
+export async function listAnnouncements(organizationId: string, departmentId: string | null | undefined) {
+  // departmentId === undefined -> no filter at all (full admins see every
+  //   announcement across the org, department-scoped or not).
+  // departmentId === null -> viewer isn't in any department, so only
+  //   org-wide (department_id IS NULL) announcements are visible to them.
+  // departmentId === '<uuid>' -> org-wide OR that specific department.
   const params: any[] = [organizationId];
   let deptClause = '';
-  if (departmentId) {
+  if (departmentId === null) {
+    deptClause = 'AND a.department_id IS NULL';
+  } else if (departmentId !== undefined) {
     params.push(departmentId);
-    // Show org-wide announcements (null department) AND this department's.
     deptClause = `AND (a.department_id IS NULL OR a.department_id = $2)`;
   }
 
@@ -83,8 +89,21 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
   return announcement;
 }
 
-// Fetch a single announcement by id, scoped to the caller's org.
-export async function getAnnouncement(organizationId: string, announcementId: string) {
+// Fetch a single announcement by id, scoped to the caller's org AND their
+// visibility (same rule as the list: org-wide always visible, department-
+// scoped only to that department, unless the viewer is a full admin).
+// Without this check, anyone who had (or guessed) an announcement's id
+// could read a department-only one directly, bypassing the list filter
+// entirely - the id itself carries no authorization on its own.
+export async function getAnnouncement(organizationId: string, announcementId: string, viewerDepartmentId: string | null | undefined) {
+  const params: any[] = [organizationId, announcementId];
+  let deptClause = '';
+  if (viewerDepartmentId === null) {
+    deptClause = 'AND a.department_id IS NULL';
+  } else if (viewerDepartmentId !== undefined) {
+    params.push(viewerDepartmentId);
+    deptClause = `AND (a.department_id IS NULL OR a.department_id = $3)`;
+  }
   const result = await pool.query(
     `SELECT a.id, a.department_id, a.title, a.content, a.created_by, a.created_at,
             d.name AS department_name,
@@ -92,8 +111,9 @@ export async function getAnnouncement(organizationId: string, announcementId: st
      FROM announcements a
      LEFT JOIN departments d ON d.id = a.department_id
      LEFT JOIN employee_profiles p ON p.user_id = a.created_by
-     WHERE a.organization_id = $1 AND a.id = $2`,
-    [organizationId, announcementId]
+     WHERE a.organization_id = $1 AND a.id = $2
+       ${deptClause}`,
+    params
   );
   return result.rows[0] || null;
 }

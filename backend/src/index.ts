@@ -15,6 +15,7 @@ import reactionsRoutes from './modules/reactions/reactions.routes';
 import eventsRoutes from './modules/events/events.routes';
 import usersRoutes from './modules/users/users.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import tasksRoutes from './modules/tasks/tasks.routes';
 import { attachSocketServer } from './modules/messaging/socketGateway';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './docs/openapi';
@@ -56,6 +57,7 @@ app.use('/api/v1/reactions', reactionsRoutes);
 app.use('/api/v1/events', eventsRoutes);
 app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/tasks', tasksRoutes);
 
 app.get('/api/v1/me', requireAuth, (req, res) => {
   res.json({ user: req.user });

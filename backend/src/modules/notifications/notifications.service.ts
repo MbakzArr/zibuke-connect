@@ -6,7 +6,7 @@ import { emitToUser } from '../messaging/realtime';
 // they don't touch sockets themselves. If the user is connected, they get
 // it instantly; if not, it's waiting in their list when they next load.
 
-type NotificationType = 'mention' | 'announcement' | 'dm' | 'event' | 'department_head';
+type NotificationType = 'mention' | 'announcement' | 'dm' | 'event' | 'department_head' | 'task_assigned';
 
 interface CreateNotificationInput {
   userId: string;
@@ -73,6 +73,13 @@ async function hydrateOne(n: any) {
     );
     return { ...n, ...r.rows[0] };
   }
+  if (n.type === 'task_assigned') {
+    const r = await pool.query(
+      `SELECT title AS task_title, TO_CHAR(due_date, 'YYYY-MM-DD') AS task_due_date FROM tasks WHERE id = $1`,
+      [n.source_id]
+    );
+    return { ...n, ...r.rows[0] };
+  }
   return n;
 }
 
@@ -122,7 +129,9 @@ export async function listNotifications(userId: string, unreadOnly = false) {
             ev.title           AS event_title,
             ev.starts_at       AS event_starts_at,
             ev.venue           AS event_venue,
-            dept.name          AS department_name
+            dept.name          AS department_name,
+            tsk.title          AS task_title,
+            TO_CHAR(tsk.due_date, 'YYYY-MM-DD') AS task_due_date
      FROM notifications n
      LEFT JOIN messages msg
        ON msg.id = n.source_id AND n.type IN ('mention', 'dm')
@@ -134,6 +143,8 @@ export async function listNotifications(userId: string, unreadOnly = false) {
        ON ev.id = n.source_id AND n.type = 'event'
      LEFT JOIN departments dept
        ON dept.id = n.source_id AND n.type = 'department_head'
+     LEFT JOIN tasks tsk
+       ON tsk.id = n.source_id AND n.type = 'task_assigned'
      WHERE n.user_id = $1
        ${unreadOnly ? 'AND n.is_read = false' : ''}
      ORDER BY n.created_at DESC

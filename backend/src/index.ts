@@ -1,8 +1,7 @@
 import express from 'express';
-import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
+import { httpServerHandler } from 'cloudflare:node';
 import authRoutes from './modules/auth/auth.routes';
 import departmentsRoutes from './modules/departments/departments.routes';
 import channelsRoutes from './modules/channels/channels.routes';
@@ -16,12 +15,16 @@ import eventsRoutes from './modules/events/events.routes';
 import usersRoutes from './modules/users/users.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import tasksRoutes from './modules/tasks/tasks.routes';
-import { attachSocketServer } from './modules/messaging/socketGateway';
-import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './docs/openapi';
 import { requireAuth } from './middleware/requireAuth';
 
-dotenv.config();
+// CLOUDFLARE WORKERS ENTRY POINT (cloudflare branch only - the Render/
+// Node entry point on main/develop is a separate, unmodified file). No
+// dotenv here: Workers has no local filesystem to read a .env file from
+// at runtime, and it doesn't need one anyway - with nodejs_compat and a
+// recent compatibility_date, process.env is already populated directly
+// from this Worker's configured vars/secrets (see wrangler.jsonc and
+// `wrangler secret put`), automatically, before any code here runs.
 
 const app = express();
 
@@ -55,16 +58,66 @@ app.use(
   })
 );
 // Cap request bodies so a single huge payload can't exhaust memory.
-app.use(express.json({ limit: '100kb' }));
+// Not express.json() - that pulls in body-parser -> raw-body -> iconv-lite,
+// and iconv-lite's stream handling (there to support non-UTF-8 charsets,
+// which this API never needs - it's always UTF-8 JSON) doesn't work
+// correctly under Workers' node:stream polyfill. wrangler's --dry-run
+// bundle check doesn't catch this - the real `wrangler deploy` upload
+// step briefly executes the bundle to validate it, and that's what
+// surfaced "require_streams(...) is not a function" from deep inside
+// iconv-lite. This is a small, dependency-free replacement using nothing
+// but the same raw Node request-stream events httpServerHandler already
+// bridges correctly, so there's no third-party parsing chain to break.
+const JSON_BODY_LIMIT_BYTES = 100 * 1024; // 100kb, same cap as before
+
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('application/json')) {
+    req.body = {};
+    return next();
+  }
+
+  let raw = '';
+  let tooLarge = false;
+
+  req.on('data', (chunk) => {
+    if (tooLarge) return;
+    raw += typeof chunk === 'string' ? chunk : chunk.toString();
+    if (raw.length > JSON_BODY_LIMIT_BYTES) {
+      tooLarge = true;
+      res.status(413).json({ error: 'Request body too large' });
+      req.destroy();
+    }
+  });
+
+  req.on('end', () => {
+    if (tooLarge) return; // response already sent above
+    if (!raw) {
+      req.body = {};
+      return next();
+    }
+    try {
+      req.body = JSON.parse(raw);
+      next();
+    } catch {
+      res.status(400).json({ error: 'Invalid JSON in request body' });
+    }
+  });
+});
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Interactive API documentation. Browsable at /api/docs; the raw OpenAPI
-// spec is at /api/docs.json for tooling/codegen.
+// The interactive Swagger UI page (swagger-ui-express) is gone on this
+// branch - it serves its bundled HTML/CSS/JS off disk via __dirname,
+// neither of which exists on Workers (no real filesystem, no CommonJS
+// globals), and it crashed the whole worker on startup rather than just
+// that one route. The raw JSON spec below needs neither - it's already
+// an in-memory object - so it's kept as the one true source of the API
+// shape; paste it into Postman, Swagger Editor, or any external Swagger
+// UI instance for the same browsing experience.
 app.get('/api/docs.json', (_req, res) => res.json(openApiSpec));
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/departments', departmentsRoutes);
@@ -84,12 +137,24 @@ app.get('/api/v1/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
-// Express and Socket.io share one HTTP server, so both run on the same port.
-const httpServer = http.createServer(app);
-attachSocketServer(httpServer, allowedOrigins);
+// STAGE 3 (not yet done): real-time messaging. The Node/Render version of
+// this file attaches Socket.io to the same http.Server Express runs on -
+// that doesn't have a direct equivalent on Workers, since Socket.io's
+// library internals depend on a persistent Node process. The Cloudflare-
+// native answer is native WebSockets + a Durable Object per
+// channel/org to hold connections and broadcast between them, which is
+// its own separate piece of work, deliberately not attempted here.
+// Nothing above breaks without it: every place the REST API pushes a
+// live update (emitToChannel/broadcastToOrg/emitToUser in realtime.ts)
+// already no-ops safely if no socket server was ever attached (`if
+// (!io) return;`) - so every endpoint here still saves/reads data
+// correctly over plain REST, it just won't also push instantly over a
+// socket until Stage 3 wires that back up.
 
 const PORT = process.env.PORT || 4000;
+app.listen(PORT);
 
-httpServer.listen(PORT, () => {
-  console.log(`Zibuke Collab API + WebSocket listening on port ${PORT}`);
-});
+// Bridges Express's request handling into a Workers `fetch` handler -
+// this one line is the actual Cloudflare-specific part of this whole
+// file; everything above it is the same Express app as always.
+export default httpServerHandler({ port: Number(PORT) });

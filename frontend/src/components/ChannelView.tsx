@@ -174,7 +174,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
 
     function onNew(msg: Message) {
       if (msg.channel_id === channel.id) {
-        setMessages((prev) => [...prev, msg]);
+        // Dedup by id: your own sent message is already appended locally
+        // by send() the moment the REST call returns - if a live socket
+        // ALSO echoes it back (once Stage 3 adds that), this stops it
+        // from showing up twice.
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       }
     }
     // An edit or delete from anyone: replace the message in place.
@@ -388,25 +392,30 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
 
   function send() {
     const content = draft.trim();
-    if (!content || !socket) return;
+    if (!content) return;
     if (!isMember) {
       showToast(`Join #${channel.name} to send messages.`, { type: 'error' });
       return;
     }
-    // The server acks every send with either nothing (success) or an
-    // { error } object - e.g. "you're not a member anymore". That ack was
-    // never being read before, so a rejected send just silently vanished
-    // with the draft cleared and no explanation. Now it's surfaced as a
-    // toast, and the draft is restored so nothing typed gets lost.
+    // REST, not socket.emit - sending used to be socket-only, which meant
+    // it didn't work AT ALL (not just "no live push") on any deploy
+    // target without a socket server running yet. This works everywhere,
+    // with or without a live connection, and the sender's own message is
+    // appended locally from the response rather than waiting to hear it
+    // echoed back over a socket. Once a socket server IS present, the
+    // dedup-by-id check in the message:new handler above stops it from
+    // appearing twice when both this and the live broadcast arrive.
     const sentContent = content;
-    socket.emit('message:send', { channelId: channel.id, content }, (res?: { error?: string }) => {
-      if (res?.error) {
-        showToast(res.error, { type: 'error' });
-        setDraft((current) => current || sentContent);
-      }
-    });
-    socket.emit('typing:stop', channel.id);
     setDraft('');
+    socket?.emit('typing:stop', channel.id);
+    messagesApi.send(channel.id, sentContent)
+      .then(({ message }) => {
+        setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+      })
+      .catch((err: any) => {
+        showToast(err?.message || 'Could not send that message.', { type: 'error' });
+        setDraft((current) => current || sentContent);
+      });
   }
 
   function handleTyping(value: string) {

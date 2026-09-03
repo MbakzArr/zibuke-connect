@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import { pool } from '../../db/pool';
 import { createMessage } from '../messaging/messaging.service';
 import { emitToChannel } from '../messaging/realtime';
@@ -7,10 +6,28 @@ import { emitToChannel } from '../messaging/realtime';
 // without a user account. Auth is a per-webhook secret, not a JWT. The
 // secret is shown ONCE at creation and only its hash is stored, so a leaked
 // database never exposes usable tokens.
+//
+// Uses the Web Crypto API (globalThis.crypto), not Node's `crypto` module -
+// on the Workers runtime this is the one guaranteed-native primitive with
+// no dependency on the nodejs_compat shim's completeness for the specific
+// functions used here, and no @types/node vs @cloudflare/workers-types
+// typing conflict. It's also just standard web platform API, so this same
+// code would work unmodified in a browser or any other JS runtime too.
+
+function randomHex(byteLength: number): string {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 // Hash a token the same way every time so we can look it up by hash.
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('hex');
+// subtle.digest is async (the one real API-shape difference from Node's
+// synchronous crypto.createHash), so this and everywhere it's called
+// needed `await` added.
+async function hashToken(raw: string): Promise<string> {
+  const data = new TextEncoder().encode(raw);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 interface CreateWebhookInput {
@@ -35,8 +52,8 @@ export async function createWebhook(input: CreateWebhookInput) {
   }
 
   // A long random token, prefixed so it's recognisable in logs/config.
-  const rawToken = 'whk_' + crypto.randomBytes(24).toString('hex');
-  const tokenHash = hashToken(rawToken);
+  const rawToken = 'whk_' + randomHex(24);
+  const tokenHash = await hashToken(rawToken);
 
   const result = await pool.query(
     `INSERT INTO webhook_tokens (organization_id, channel_id, label, token_hash, created_by)
@@ -72,7 +89,7 @@ export async function deleteWebhook(organizationId: string, webhookId: string) {
 // webhook by token hash, post the message to its channel, and broadcast it
 // live just like a user message. Returns the created message or throws.
 export async function postViaWebhook(rawToken: string, content: string) {
-  const tokenHash = hashToken(rawToken);
+  const tokenHash = await hashToken(rawToken);
 
   const result = await pool.query(
     `SELECT id, channel_id, organization_id FROM webhook_tokens WHERE token_hash = $1`,

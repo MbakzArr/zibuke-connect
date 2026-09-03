@@ -1,27 +1,53 @@
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import { Client } from 'pg';
+import { env } from 'cloudflare:workers';
 
-dotenv.config();
-
-// Single shared connection pool. Every module imports this instead of
-// creating its own connection, so we only ever manage one pool.
+// CLOUDFLARE WORKERS VERSION of this file (cloudflare branch only - the
+// Render/Node version, a single long-lived pg.Pool, is a separate,
+// unmodified file). Workers doesn't allow holding a database connection
+// open across requests in module scope - Cloudflare's own Hyperdrive docs
+// are explicit that a Pool created at the top level "will leave you with
+// stale connections that result in failures." Hyperdrive already does
+// real connection pooling on Cloudflare's side, specifically so that
+// opening a fresh Client per call is fast rather than a compromise - that
+// startup-latency problem is the thing Hyperdrive exists to solve.
 //
-// SSL: Render's managed Postgres only REQUIRES TLS on external
-// connections - the deployed backend itself talks to the database over
-// Render's internal network (the Internal Database URL), which doesn't
-// enforce it, so this never showed up in production. Running anything
-// locally against the EXTERNAL database URL (migrations, one-off scripts)
-// hits the enforced case and fails with "SSL/TLS required" without this.
-// Enabling it for any render.com host is safe either way - Postgres
-// accepts SSL on the internal path too, it's just not mandatory there.
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('render.com')
-    ? { rejectUnauthorized: false }
-    : undefined,
-});
+// The `pool` object below is written to match pg.Pool's shape exactly
+// (.query(), and .connect() returning something with .query()/.release())
+// on purpose: every other file in this codebase does
+// `import { pool } from '../../db/pool'` and calls `pool.query(...)` or
+// `pool.connect()` for a transaction, and none of those ~20 call sites
+// needed to change for this - only this one file did.
 
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle database client', err);
-  process.exit(1);
-});
+interface HyperdriveEnv {
+  HYPERDRIVE: { connectionString: string };
+}
+
+function hyperdriveConnectionString(): string {
+  return (env as unknown as HyperdriveEnv).HYPERDRIVE.connectionString;
+}
+
+export const pool = {
+  async query(text: string, params?: unknown[]) {
+    const client = new Client({ connectionString: hyperdriveConnectionString() });
+    await client.connect();
+    try {
+      return await client.query(text, params);
+    } finally {
+      await client.end();
+    }
+  },
+
+  // Mirrors pg.Pool.connect(): returns a client-shaped object for callers
+  // running several queries as one transaction (BEGIN/.../COMMIT or
+  // ROLLBACK), e.g. admin.service.ts's createEmployee. release() ends the
+  // connection - same job client.release() does in the Node version,
+  // just without an actual pool to return the connection to.
+  async connect() {
+    const client = new Client({ connectionString: hyperdriveConnectionString() });
+    await client.connect();
+    return {
+      query: client.query.bind(client),
+      release: () => client.end(),
+    };
+  },
+};

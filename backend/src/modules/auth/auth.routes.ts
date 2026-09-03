@@ -1,26 +1,31 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import { login, refresh } from './auth.controller';
 
 const router = Router();
 
-// Auth endpoints get their own, tighter rate limit than the rest of the API,
-// since they're the main target for credential stuffing / brute force attempts.
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  message: { error: 'Too many attempts, please try again later' },
-});
-
-// NOTE: there used to be an open POST /register here. It took a raw
-// organizationId from the request body with no invite/approval check -
-// and since organizationId is embedded in every access token (JWTs are
-// signed, not encrypted, so anyone can decode their own), any current OR
-// former employee could read their org id and self-register a brand new
-// account, completely bypassing admin control over who's on the team.
-// Account creation now only happens through POST /api/v1/admin/users
-// (admin-only, see modules/admin), which does the same job properly.
-router.post('/login', authLimiter, login);
+// The Node/Render version of this file rate-limits login attempts with
+// express-rate-limit's in-memory store. That doesn't translate to
+// Workers for two separate reasons, not just one:
+//   1. Its default store calls setInterval() the moment the limiter is
+//      created, to periodically sweep expired counters - and Workers
+//      flatly disallows timers outside of an actual request handler
+//      (this crashed the whole worker on startup: "Disallowed operation
+//      called within global scope").
+//   2. Even if that crash is worked around, an in-memory counter only
+//      lives inside ONE isolate. Cloudflare runs many isolates across
+//      many edge locations - an attacker's requests would mostly land on
+//      DIFFERENT isolates, each with its own independent counter, so the
+//      limit would barely apply at all. This isn't an Express problem to
+//      patch, it's a real mismatch between "one counter in one process"
+//      and how Workers actually scales.
+//
+// The right replacement is Cloudflare's own native rate limiting, which
+// runs at the edge, shares state correctly across every location, and
+// doesn't need a single line of app code: dashboard -> this Worker's
+// route -> Security -> Rate limiting rules -> a rule on POST
+// /api/v1/auth/login (e.g. 20 requests per 15 minutes per IP, matching
+// what this used to do). See PART 6 notes for the exact walkthrough.
+router.post('/login', login);
 router.post('/refresh', refresh);
 
 export default router;

@@ -208,6 +208,11 @@ export interface RecentConversation {
 }
 
 export const messagesApi = {
+  send: (channelId: string, content: string) =>
+    apiRequest<{ message: Message }>('/api/v1/messages', {
+      method: 'POST',
+      body: { channelId, content },
+    }),
   edit: (id: string, content: string) =>
     apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, {
       method: 'PATCH',

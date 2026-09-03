@@ -84,6 +84,11 @@ export interface Notification {
   department_name?: string | null;
   task_title?: string | null;
   task_due_date?: string | null;
+  reaction_emoji?: string | null;
+  reaction_target_type?: string | null;
+  reactor_name?: string | null;
+  reaction_message_content?: string | null;
+  reaction_announcement_title?: string | null;
 }
 
 
@@ -126,7 +131,7 @@ export interface PlaceDm {
 
 
 export interface ReactionCounts {
-  [emoji: string]: { count: number; reacted: boolean };
+  [emoji: string]: { count: number; reacted: boolean; reactors: string[] };
 }
 export interface ReactionsMap {
   [targetId: string]: ReactionCounts;

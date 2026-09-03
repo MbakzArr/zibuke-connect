@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { eventsApi, tasksApi, type Event, type Task } from '../api/resources';
 import { useAuth } from '../context/AuthContext';
 import EventListItem from './EventListItem';
@@ -18,6 +18,13 @@ export default function MiniCalendar() {
   const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<Event[]>([]);
+  // The sidebar is a tall, scrollable overlay on mobile - by the time
+  // someone's scrolled down to the (often-collapsed) Calendar section and
+  // picked a day, the resulting day panel (and its "+ Add event" button)
+  // can render well below the visible area with nothing to indicate more
+  // is there. This ref lets a day selection scroll itself into view
+  // instead of leaving it to be found by accident.
+  const dayPanelRef = useRef<HTMLDivElement>(null);
   const [loadingDay, setLoadingDay] = useState(false);
   const [addingOn, setAddingOn] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -50,6 +57,16 @@ export default function MiniCalendar() {
   }
 
   const selectedTasks = selectedDate ? myTasks.filter((t) => t.due_date === selectedDate) : [];
+
+  // Bring the day panel into view the moment a day is picked, rather than
+  // leaving it below the fold in the sidebar's scroll area with no cue
+  // that there's more to see. "nearest" so it doesn't yank the page to
+  // center the panel if it's already mostly visible.
+  useEffect(() => {
+    if (selectedDate) {
+      dayPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedDate]);
 
   async function pickDay(day: number) {
     const ds = dateStr(day);
@@ -130,7 +147,7 @@ export default function MiniCalendar() {
         )}
       </div>
       {selectedDate && (
-        <div className="mini-cal-day-events">
+        <div className="mini-cal-day-events" ref={dayPanelRef}>
           {loadingDay ? (
             <p className="hub-muted">Loading…</p>
           ) : (

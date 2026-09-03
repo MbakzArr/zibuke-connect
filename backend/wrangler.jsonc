@@ -1,31 +1,43 @@
 {
-	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "zibuke-connect-backend",
-	"main": "src/index.ts",
-	"compatibility_date": "2026-09-02",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"observability": {
-		"enabled": true
-	},
-	// Filled in during setup (Part 2 below) with the id printed by:
-	//   npx wrangler hyperdrive create zibuke-connect-db --connection-string="<render-external-db-url>"
-	// This is not a secret itself (it's just an id Cloudflare assigned to
-	// the Hyperdrive config), safe to commit - the actual connection
-	// string lives only in Hyperdrive's own config, never here.
-	"hyperdrive": [
-		{
-			"binding": "HYPERDRIVE",
-			"id": "34102b6d4c1a4c79bf7c4de958fa7955"
-		}
-	],
-	// Non-secret configuration. FRONTEND_ORIGIN is safe here (it's a public
-	// URL, not a credential). JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and
-	// anything else sensitive are set separately via `wrangler secret put`
-	// (see Part 3) - deliberately never written into this file, so nothing
-	// sensitive ends up in git history.
-	"vars": {
-		"FRONTEND_ORIGIN": "https://zibuke-connect.netlify.app,https://zibuke-connect-frontend.zibuke-connect-frontend.workers.dev"
-	}
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "zibuke-connect-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Set via `npx wrangler hyperdrive create zibuke-connect-db --connection-string="<neon-direct-url>"`.
+  // Not a secret itself (just an id Cloudflare assigned to the Hyperdrive
+  // config), safe to commit - the actual connection string lives only in
+  // Hyperdrive's own config, never here.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "34102b6d4c1a4c79bf7c4de958fa7955"
+    }
+  ],
+
+  // Stage 3: replaces Socket.io. One Durable Object instance handles
+  // every connected client for the whole deployment (see
+  // src/durable/RealtimeRoom.ts for why one instance is enough here).
+  // new_sqlite_classes (not new_classes) because this DO uses the
+  // storage API implicitly via WebSocket Hibernation's attachment
+  // persistence, which is backed by the SQLite storage backend.
+  "durable_objects": {
+    "bindings": [
+      { "name": "REALTIME_ROOM", "class_name": "RealtimeRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["RealtimeRoom"] }
+  ],
+
+  // Non-secret configuration. FRONTEND_ORIGIN is safe here (it's a public
+  // URL, not a credential). JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and
+  // anything else sensitive are set separately via `wrangler secret put`
+  // (see Part 3) - deliberately never written into this file, so nothing
+  // sensitive ends up in git history.
+  "vars": {
+    "FRONTEND_ORIGIN": "https://zibuke-connect.netlify.app,https://zibuke-connect-frontend.zibuke-connect-frontend.workers.dev"
+  }
 }

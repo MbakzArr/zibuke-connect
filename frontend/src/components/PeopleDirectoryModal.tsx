@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { type Person } from '../api/resources';
 import { colorFor } from '../util/avatarColor';
 import { statusColor, statusLabel } from '../util/status';
+import { usePresenceMap } from '../context/PresenceContext';
 
 // Everyone in the org, not just who's online - opened from the "Directory"
 // button on the People Online card. Filters client-side as you type (the
@@ -24,6 +25,7 @@ export default function PeopleDirectoryModal({
   onViewProfile: (userId: string) => void;
 }) {
   const [query, setQuery] = useState('');
+  const presenceMap = usePresenceMap();
   const q = query.trim().toLowerCase();
   const filtered = q
     ? people.filter((p) =>
@@ -48,10 +50,12 @@ export default function PeopleDirectoryModal({
           autoFocus
         />
         <ul className="directory-list">
-          {filtered.map((p) => (
+          {filtered.map((p) => {
+            const liveStatus = presenceMap.get(p.id) ?? p.status;
+            return (
             <li key={p.id} className="directory-row">
               <button className="directory-row-btn" onClick={() => onViewProfile(p.id)}>
-                <span className="hub-dot" style={{ background: statusColor(p.status, p.availability) }} title={statusLabel(p.status, p.availability)} />
+                <span className="hub-dot" style={{ background: statusColor(liveStatus, p.availability) }} title={statusLabel(liveStatus, p.availability)} />
                 <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
                   {(p.full_name || '?').charAt(0).toUpperCase()}
                 </span>
@@ -66,14 +70,15 @@ export default function PeopleDirectoryModal({
                     <span className="directory-jobtitle">{p.job_title || 'Job title not set'}</span>
                     {p.department_name && <span className="directory-dept">{p.department_name}</span>}
                   </span>
-                  <span className={`directory-availability directory-availability--${p.status === 'online' ? (p.availability || 'available') : 'offline'}`}>
-                    {statusLabel(p.status, p.availability)}
+                  <span className={`directory-availability directory-availability--${liveStatus === 'online' ? (p.availability || 'available') : 'offline'}`}>
+                    {statusLabel(liveStatus, p.availability)}
                   </span>
                 </span>
               </button>
               <button className="directory-msg" onClick={() => onMessage(p)}>Message</button>
             </li>
-          ))}
+            );
+          })}
           {filtered.length === 0 && (
             <li className="hub-muted">
               {q ? `No one matches "${query}".` : 'No one in the directory yet.'}

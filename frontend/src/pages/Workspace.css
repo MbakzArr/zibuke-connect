@@ -196,6 +196,7 @@
 .chan-composer {
   padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid var(--border); flex-shrink: 0;
+  position: relative;
 }
 .chan-composer-inner {
   display: flex; gap: var(--sp-3); max-width: 860px; margin: 0 auto;
@@ -210,6 +211,28 @@
   background: var(--indigo-600); color: #fff; font-weight: 600; font-size: 14px;
 }
 .chan-composer button:hover:not(:disabled) { background: var(--indigo-700); }
+
+/* ---- @mention autocomplete dropdown ---- */
+.chan-mention-dropdown {
+  position: absolute; bottom: 100%; left: var(--sp-5); right: var(--sp-5);
+  max-width: 860px; margin: 0 auto 6px;
+  list-style: none; padding: 6px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(26, 26, 46, 0.14); max-height: 220px; overflow-y: auto;
+}
+.chan-mention-option {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border: none; background: transparent; border-radius: 8px;
+  text-align: left; font-size: 13px;
+}
+.chan-mention-option.is-active, .chan-mention-option:hover { background: var(--indigo-50); }
+.chan-mention-avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 700;
+}
+.chan-mention-name { font-weight: 600; color: var(--ink); }
+.chan-mention-title { color: var(--ink-faint); font-size: 12px; margin-left: auto; padding-left: 8px; }
 .chan-composer button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Shown instead of the composer when you're viewing a public channel you

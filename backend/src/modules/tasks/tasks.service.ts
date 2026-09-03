@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool';
 import { createNotification } from '../notifications/notifications.service';
+import { runInBackground } from '../../util/background';
 
 // Simple task tracking: assign a title (+ optional description, due date)
 // to someone. Two states only - open/done - no workflow beyond that.
@@ -64,9 +65,7 @@ export async function createTask(input: CreateTaskInput) {
   // Assigning yourself a task is a normal thing (a personal todo) - no
   // need to notify yourself about your own action.
   if (assignedTo !== assignedBy) {
-    createNotification({ userId: assignedTo, type: 'task_assigned', sourceId: taskId }).catch((err) =>
-      console.error('Task assignment notification failed:', err)
-    );
+    runInBackground(createNotification({ userId: assignedTo, type: 'task_assigned', sourceId: taskId }));
   }
 
   return getTaskFull(taskId);

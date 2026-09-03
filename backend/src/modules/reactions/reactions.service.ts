@@ -11,14 +11,16 @@ const ALLOWED_EMOJI = ['🎉', '👍', '❤️', '🥳', '👏'];
 type TargetType = 'announcement' | 'birthday' | 'message';
 
 // Toggle a reaction: add it if absent, remove it if the user already reacted
-// with that emoji on that target. Returns 'added' or 'removed'.
+// with that emoji on that target. Returns 'added' or 'removed', plus the
+// reaction row's own id when adding (the caller needs it to point a
+// notification at this specific reaction).
 export async function toggleReaction(
   organizationId: string,
   userId: string,
   targetType: TargetType,
   targetId: string,
   emoji: string
-): Promise<'added' | 'removed'> {
+): Promise<{ status: 'added' | 'removed'; reactionId?: string }> {
   if (!ALLOWED_EMOJI.includes(emoji)) {
     throw new Error('INVALID_EMOJI');
   }
@@ -34,7 +36,7 @@ export async function toggleReaction(
   const sameEmoji = existing.rows.find((r) => r.emoji === emoji);
   if (sameEmoji) {
     await pool.query('DELETE FROM reactions WHERE id = $1', [sameEmoji.id]);
-    return 'removed';
+    return { status: 'removed' };
   }
 
   // One reaction per person per item: clear any other reaction this user has
@@ -47,17 +49,21 @@ export async function toggleReaction(
     );
   }
 
-  await pool.query(
+  const inserted = await pool.query(
     `INSERT INTO reactions (organization_id, target_type, target_id, emoji, user_id)
-     VALUES ($1, $2, $3, $4, $5)`,
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id`,
     [organizationId, targetType, targetId, emoji, userId]
   );
-  return 'added';
+  return { status: 'added', reactionId: inserted.rows[0].id };
 }
 
 // Get reaction counts for a set of targets of one type, plus which emoji the
-// current user has reacted with (so the UI can highlight their choices).
-// Returns a map: targetId -> { emoji -> { count, reacted } }.
+// current user has reacted with (so the UI can highlight their choices) and
+// WHO reacted with each emoji (so a reaction pill can actually answer "who
+// reacted?" instead of just a count - a bare number was the thing flagged
+// as not worth having on its own).
+// Returns a map: targetId -> { emoji -> { count, reacted, reactors } }.
 export async function getReactions(
   organizationId: string,
   userId: string,
@@ -67,21 +73,23 @@ export async function getReactions(
   if (targetIds.length === 0) return {};
 
   const result = await pool.query(
-    `SELECT target_id, emoji,
+    `SELECT r.target_id, r.emoji,
             COUNT(*)::int AS count,
-            bool_or(user_id = $3) AS reacted
-     FROM reactions
-     WHERE organization_id = $1
-       AND target_type = $2
-       AND target_id = ANY($4)
-     GROUP BY target_id, emoji`,
+            bool_or(r.user_id = $3) AS reacted,
+            array_agg(COALESCE(p.full_name, 'Someone') ORDER BY r.created_at) AS reactor_names
+     FROM reactions r
+     LEFT JOIN employee_profiles p ON p.user_id = r.user_id
+     WHERE r.organization_id = $1
+       AND r.target_type = $2
+       AND r.target_id = ANY($4)
+     GROUP BY r.target_id, r.emoji`,
     [organizationId, targetType, userId, targetIds]
   );
 
-  const map: Record<string, Record<string, { count: number; reacted: boolean }>> = {};
+  const map: Record<string, Record<string, { count: number; reacted: boolean; reactors: string[] }>> = {};
   for (const row of result.rows) {
     if (!map[row.target_id]) map[row.target_id] = {};
-    map[row.target_id][row.emoji] = { count: row.count, reacted: row.reacted };
+    map[row.target_id][row.emoji] = { count: row.count, reacted: row.reacted, reactors: row.reactor_names };
   }
   return map;
 }

@@ -449,6 +449,7 @@ export default function Workspace() {
               }
               onBack={openHub}
               onLeftChannel={openHub}
+              onDmActivity={() => setDmRefreshKey((k) => k + 1)}
             />
           ) : null}
         </div>

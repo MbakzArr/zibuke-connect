@@ -4,6 +4,7 @@ import { getChannel, isMember, getDmRecipient, getOtherChannelMemberIds } from '
 import { processMentions } from './mentions.service';
 import { createNotification } from '../notifications/notifications.service';
 import { emitToChannel, emitToUser } from './realtime';
+import { runInBackground } from '../../util/background';
 
 // REST endpoints for message history and edit/delete. Sending itself was
 // socket-only until this endpoint existed - fine on Render, where the
@@ -41,27 +42,26 @@ export async function create(req: Request, res: Response) {
     // Same broadcasts the socket handler does - safe no-ops without a
     // live socket server attached (see the module comment above).
     emitToChannel(channelId, 'message:new', message);
-    getOtherChannelMemberIds(channelId, req.user!.userId)
-      .then((memberIds) => {
+    // Every one of these is genuine background work, not just a live
+    // push - mentions and DM notifications are real stored rows, not
+    // no-ops without a socket. runInBackground() (on Cloudflare) makes
+    // sure these actually finish instead of racing the response and
+    // sometimes getting cut off - see util/background.ts.
+    runInBackground(
+      getOtherChannelMemberIds(channelId, req.user!.userId).then((memberIds) => {
         for (const memberId of memberIds) {
           emitToUser(memberId, 'channel:activity', { channelId });
         }
       })
-      .catch((err) => console.error('channel:activity broadcast failed:', err));
-
-    // @mentions and DM notifications are real stored data, not just a live
-    // push - these need to happen regardless of whether anyone's watching
-    // live, so unlike the emits above they're not "no-ops without a
-    // socket" - they genuinely create notification rows either way.
-    processMentions(message.id, channelId, req.user!.userId, message.content)
-      .catch((err) => console.error('Mention processing failed:', err));
-    getDmRecipient(channelId, req.user!.userId)
-      .then((recipientId) => {
+    );
+    runInBackground(processMentions(message.id, channelId, req.user!.userId, message.content));
+    runInBackground(
+      getDmRecipient(channelId, req.user!.userId).then((recipientId) => {
         if (recipientId) {
           return createNotification({ userId: recipientId, type: 'dm', sourceId: message.id });
         }
       })
-      .catch((err) => console.error('DM notification failed:', err));
+    );
 
     return res.status(201).json({ message });
   } catch (err) {

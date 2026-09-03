@@ -17,6 +17,11 @@ import adminRoutes from './modules/admin/admin.routes';
 import tasksRoutes from './modules/tasks/tasks.routes';
 import { openApiSpec } from './docs/openapi';
 import { requireAuth } from './middleware/requireAuth';
+import { RealtimeRoom } from './durable/RealtimeRoom';
+
+// The Durable Object class itself must be exported from the main module
+// for the binding in wrangler.jsonc to find it.
+export { RealtimeRoom };
 
 // CLOUDFLARE WORKERS ENTRY POINT (cloudflare branch only - the Render/
 // Node entry point on main/develop is a separate, unmodified file). No
@@ -137,24 +142,47 @@ app.get('/api/v1/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
-// STAGE 3 (not yet done): real-time messaging. The Node/Render version of
-// this file attaches Socket.io to the same http.Server Express runs on -
-// that doesn't have a direct equivalent on Workers, since Socket.io's
-// library internals depend on a persistent Node process. The Cloudflare-
-// native answer is native WebSockets + a Durable Object per
-// channel/org to hold connections and broadcast between them, which is
-// its own separate piece of work, deliberately not attempted here.
-// Nothing above breaks without it: every place the REST API pushes a
+// STAGE 3 - real-time messaging. Socket.io doesn't run on Workers (its
+// internals depend on a persistent Node process to hold state in), so
+// the Cloudflare-native replacement is a Durable Object using native
+// WebSockets (see src/durable/RealtimeRoom.ts for the full design). The
+// REST API doesn't need to change for this - every place it pushes a
 // live update (emitToChannel/broadcastToOrg/emitToUser in realtime.ts)
-// already no-ops safely if no socket server was ever attached (`if
-// (!io) return;`) - so every endpoint here still saves/reads data
-// correctly over plain REST, it just won't also push instantly over a
-// socket until Stage 3 wires that back up.
+// already goes through those same three functions; only realtime.ts's
+// own internals differ from the Render/Node version (that one talks to
+// socket.io's `io`, this one POSTs to the Durable Object instead).
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT);
 
-// Bridges Express's request handling into a Workers `fetch` handler -
-// this one line is the actual Cloudflare-specific part of this whole
-// file; everything above it is the same Express app as always.
-export default httpServerHandler({ port: Number(PORT) });
+const expressHandler = httpServerHandler({ port: Number(PORT) });
+
+interface Env {
+  REALTIME_ROOM: DurableObjectNamespace;
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
+    // A WebSocket upgrade can't be handled by Express at all - Node's
+    // http.Server upgrade mechanism and the Workers WebSocketPair/101-
+    // response primitive are different things, and the httpServerHandler
+    // bridge only translates plain request/response traffic. So this one
+    // route is intercepted here, before Express ever sees it, and handed
+    // straight to the (single, global - see RealtimeRoom.ts) Durable
+    // Object instance, which does its own auth and connection handling.
+    if (url.pathname === '/ws') {
+      const id = env.REALTIME_ROOM.idFromName('global');
+      const stub = env.REALTIME_ROOM.get(id);
+      return stub.fetch(request);
+    }
+
+    // Everything else: the same Express app as always. Cast to any here -
+    // httpServerHandler()'s return type and the ambient Request/Env types
+    // from @cloudflare/workers-types don't perfectly line up (a type-only
+    // mismatch between two different typings of the same runtime request
+    // object), this is just bridging that gap, not a real risk.
+    return (expressHandler as any).fetch(request, env, ctx);
+  },
+};

@@ -1,12 +1,74 @@
 import { Request, Response } from 'express';
-import { getMessages, editMessage, deleteMessage, restoreMessage, searchMessages, getRecentConversations } from './messaging.service';
-import { getChannel, isMember } from '../channels/channels.service';
-import { emitToChannel } from './realtime';
+import { getMessages, editMessage, deleteMessage, restoreMessage, searchMessages, getRecentConversations, createMessage } from './messaging.service';
+import { getChannel, isMember, getDmRecipient, getOtherChannelMemberIds } from '../channels/channels.service';
+import { processMentions } from './mentions.service';
+import { createNotification } from '../notifications/notifications.service';
+import { emitToChannel, emitToUser } from './realtime';
+import { runInBackground } from '../../util/background';
 
-// REST endpoints for message history and edit/delete. Live sending happens
-// over the socket, but history loading and edits work over plain HTTP so
-// the client can page back through old messages and edit without depending
-// on the socket connection.
+// REST endpoints for message history and edit/delete. Sending itself was
+// socket-only until this endpoint existed - fine on Render, where the
+// socket server is always there, but on a deploy target with no socket
+// server yet (Cloudflare, pre-Stage-3), that meant sending didn't work at
+// ALL, not just "doesn't push live". This does the exact same work the
+// socket handler does (membership check, create, mentions, DM
+// notification), triggered by a POST instead of a socket event. The
+// emitToChannel/emitToUser calls are the same ones the socket path uses -
+// they already no-op safely with no socket server attached, so once
+// Stage 3 adds one, this same endpoint starts broadcasting live with
+// zero further changes needed here.
+
+export async function create(req: Request, res: Response) {
+  try {
+    const { channelId, content } = req.body;
+    if (!content || String(content).trim().length === 0) {
+      return res.status(400).json({ error: 'Message cannot be empty' });
+    }
+    if (!channelId) {
+      return res.status(400).json({ error: 'channelId is required' });
+    }
+
+    const member = await isMember(channelId, req.user!.userId);
+    if (!member) {
+      return res.status(403).json({ error: 'You are not a member of this channel' });
+    }
+
+    const message = await createMessage({
+      channelId,
+      userId: req.user!.userId,
+      content: String(content).trim(),
+    });
+
+    // Same broadcasts the socket handler does - safe no-ops without a
+    // live socket server attached (see the module comment above).
+    emitToChannel(channelId, 'message:new', message);
+    // Every one of these is genuine background work, not just a live
+    // push - mentions and DM notifications are real stored rows, not
+    // no-ops without a socket. runInBackground() (on Cloudflare) makes
+    // sure these actually finish instead of racing the response and
+    // sometimes getting cut off - see util/background.ts.
+    runInBackground(
+      getOtherChannelMemberIds(channelId, req.user!.userId).then((memberIds) => {
+        for (const memberId of memberIds) {
+          emitToUser(memberId, 'channel:activity', { channelId });
+        }
+      })
+    );
+    runInBackground(processMentions(message.id, channelId, req.user!.userId, message.content));
+    runInBackground(
+      getDmRecipient(channelId, req.user!.userId).then((recipientId) => {
+        if (recipientId) {
+          return createNotification({ userId: recipientId, type: 'dm', sourceId: message.id });
+        }
+      })
+    );
+
+    return res.status(201).json({ message });
+  } catch (err) {
+    console.error('Create message error:', err);
+    return res.status(500).json({ error: 'Could not send message' });
+  }
+}
 
 export async function history(req: Request, res: Response) {
   try {

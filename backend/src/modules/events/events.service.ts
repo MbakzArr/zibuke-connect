@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool';
 import { createNotification } from '../notifications/notifications.service';
+import { runInBackground } from '../../util/background';
 
 // A deliberately minimal calendar: title + start time + optional venue, and
 // optional invited attendees. No recurrence, no RSVP status. "Today"/dates
@@ -80,9 +81,7 @@ export async function createEvent(input: CreateEventInput) {
   // change needed there, notifications.type has no fixed set of values.
   for (const userId of attendeeIds) {
     if (userId !== createdBy) {
-      createNotification({ userId, type: 'event', sourceId: eventId }).catch((err) =>
-        console.error('Event invite notification failed:', err)
-      );
+      runInBackground(createNotification({ userId, type: 'event', sourceId: eventId }));
     }
   }
 

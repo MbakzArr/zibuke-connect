@@ -46,7 +46,7 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
           const incoming = p.counts[e];
           const mine = prev[e]?.reacted || false;
           if (incoming) {
-            merged[e] = { count: incoming.count, reacted: mine };
+            merged[e] = { count: incoming.count, reacted: mine, reactors: incoming.reactors || [] };
           }
         }
         return merged;
@@ -96,19 +96,22 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
     const wasMine = counts[emoji]?.reacted;
 
     // Optimistic: if clicking my own reaction, remove it. Otherwise switch to
-    // this emoji (decrement my previous one, increment the new).
+    // this emoji (decrement my previous one, increment the new). The
+    // reactors list is left stale here (not worth reconstructing without
+    // knowing your own display name) - the live reaction:update broadcast
+    // corrects it moments later either way.
     setCounts((prev) => {
       const next = { ...prev };
       // Remove my previous reaction, if any and different.
       if (myEmoji && myEmoji !== emoji) {
-        const p = next[myEmoji] || { count: 0, reacted: false };
-        next[myEmoji] = { count: Math.max(0, p.count - 1), reacted: false };
+        const p = next[myEmoji] || { count: 0, reacted: false, reactors: [] };
+        next[myEmoji] = { ...p, count: Math.max(0, p.count - 1), reacted: false };
       }
-      const cur = next[emoji] || { count: 0, reacted: false };
+      const cur = next[emoji] || { count: 0, reacted: false, reactors: [] };
       if (wasMine) {
-        next[emoji] = { count: Math.max(0, cur.count - 1), reacted: false };
+        next[emoji] = { ...cur, count: Math.max(0, cur.count - 1), reacted: false };
       } else {
-        next[emoji] = { count: cur.count + 1, reacted: true };
+        next[emoji] = { ...cur, count: cur.count + 1, reacted: true };
       }
       return next;
     });
@@ -118,10 +121,10 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
     } catch {
       // Best-effort revert: reload would be cleaner, but flip the clicked one back.
       setCounts((prev) => {
-        const cur = prev[emoji] || { count: 0, reacted: false };
+        const cur = prev[emoji] || { count: 0, reacted: false, reactors: [] };
         const reacted = !cur.reacted;
         const count = cur.count + (reacted ? 1 : -1);
-        return { ...prev, [emoji]: { count: Math.max(0, count), reacted } };
+        return { ...prev, [emoji]: { ...cur, count: Math.max(0, count), reacted } };
       });
     }
   }
@@ -133,12 +136,22 @@ export default function Reactions({ targetType, targetId, initial }: ReactionsPr
     <div className="reactions">
       {active.map((emoji) => {
         const c = counts[emoji];
+        // "Thabo, Precious" or "Thabo, Precious and 3 more" - a plain
+        // native tooltip on hover, visible to anyone who can see the
+        // reaction at all (not just the poster), which is the whole
+        // point - a bare count with no way to see who reacted was the
+        // thing flagged as not worth having on its own.
+        const names = c?.reactors || [];
+        const reactorLabel =
+          names.length === 0 ? undefined :
+          names.length <= 3 ? names.join(', ') :
+          `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
         return (
           <button
             key={emoji}
             className={`reaction has-count ${c?.reacted ? 'is-reacted' : ''}`}
             onClick={() => react(emoji)}
-            title={c?.reacted ? 'Remove your reaction' : undefined}
+            title={reactorLabel ? (c?.reacted ? `${reactorLabel} (click to remove your reaction)` : reactorLabel) : undefined}
           >
             <span className="reaction-emoji">{emoji}</span>
             <span className="reaction-count">{c?.count || 0}</span>

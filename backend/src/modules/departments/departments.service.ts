@@ -1,5 +1,6 @@
 import { pool } from '../../db/pool';
 import { createNotification } from '../notifications/notifications.service';
+import { runInBackground } from '../../util/background';
 
 // All queries are scoped by organizationId, taken from the caller's JWT,
 // never from the request body. That's what keeps one org from reading or
@@ -71,8 +72,7 @@ export async function createDepartment(input: CreateDepartmentInput) {
     // of those actually happen: the notification here, and the profile/
     // directory badge comes from directory.service's PUBLIC_PROFILE_COLUMNS
     // picking up head_user_id via a subquery.
-    createNotification({ userId: headUserId, type: 'department_head', sourceId: department.id })
-      .catch((err) => console.error('Department head notification failed:', err));
+    runInBackground(createNotification({ userId: headUserId, type: 'department_head', sourceId: department.id }));
   }
 
   return department;
@@ -133,8 +133,7 @@ export async function updateDepartment(
   // shouldn't re-notify the existing head as if they were just appointed).
   if (headUserId && headUserId !== existing.head_user_id) {
     await pool.query('UPDATE users SET department_id = $1 WHERE id = $2', [department.id, headUserId]);
-    createNotification({ userId: headUserId, type: 'department_head', sourceId: department.id })
-      .catch((err) => console.error('Department head notification failed:', err));
+    runInBackground(createNotification({ userId: headUserId, type: 'department_head', sourceId: department.id }));
   }
 
   return department;

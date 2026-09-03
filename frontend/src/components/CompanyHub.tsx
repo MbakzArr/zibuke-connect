@@ -27,6 +27,7 @@ import ProfileModal from './ProfileModal';
 import EventListItem from './EventListItem';
 import AnnouncementScopePicker from './AnnouncementScopePicker';
 import TasksWidget from './TasksWidget';
+import { usePresenceMap } from '../context/PresenceContext';
 
 interface CompanyHubProps {
   onOpenChannel: (channel: Channel) => void;
@@ -90,6 +91,23 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const CAP = 5; // lists longer than this get a "Show more" toggle
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
+  // Live new-announcement push - this never existed before, on either
+  // platform (announcements only ever showed up on next hub load). Dedup
+  // by id: the poster's own client already prepends the announcement
+  // locally the moment they post it (see NewAnnouncement's onPosted
+  // below) - without this check, they'd see their own post twice once
+  // their own broadcast echoes back to them over the socket.
+  useEffect(() => {
+    if (!socket) return;
+    function onNewAnnouncement(a: Announcement) {
+      setAnnouncements((prev) => (prev.some((x) => x.id === a.id) ? prev : [a, ...prev]));
+    }
+    socket.on('announcement:new', onNewAnnouncement);
+    return () => {
+      socket.off('announcement:new', onNewAnnouncement);
+    };
+  }, [socket]);
   const [people, setPeople] = useState<Person[]>([]);
   const [birthdays, setBirthdays] = useState<Birthday[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -179,7 +197,8 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
     };
   }, []);
 
-  const online = people.filter((p) => p.status === 'online');
+  const presenceMap = usePresenceMap();
+  const online = people.filter((p) => (presenceMap.get(p.id) ?? p.status) === 'online');
   const isAdmin = user?.role === 'admin' || user?.role === 'department_admin';
   const todayLabel = new Intl.DateTimeFormat('en-ZA', {
     weekday: 'long', day: 'numeric', month: 'long',
@@ -383,21 +402,24 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
               </div>
             </div>
             <ul className="hub-people">
-              {(peopleExpanded ? online : online.slice(0, CAP)).map((p) => (
+              {(peopleExpanded ? online : online.slice(0, CAP)).map((p) => {
+                const liveStatus = presenceMap.get(p.id) ?? p.status;
+                return (
                 <li key={p.id}>
-                  <button className="hub-person hub-person-btn" onClick={() => setProfileUserId(p.id)}>
-                    <span className="hub-dot is-on" style={{ background: statusColor(p.status, p.availability) }} title={statusLabel(p.status, p.availability)} />
+                  <button className="hub-person-btn hub-person" onClick={() => setProfileUserId(p.id)}>
+                    <span className="hub-dot is-on" style={{ background: statusColor(liveStatus, p.availability) }} title={statusLabel(liveStatus, p.availability)} />
                     <span className="hub-avatar" style={{ background: colorFor(p.id) }}>
                       {(p.full_name || '?').charAt(0).toUpperCase()}
                     </span>
                     <span className="hub-person-info">
                       <span className="hub-person-name">{p.full_name || p.email}</span>
                       {p.job_title && <span className="hub-person-role">{p.job_title}</span>}
-                      <span className="hub-person-status">{statusLabel(p.status, p.availability)}</span>
+                      <span className="hub-person-status">{statusLabel(liveStatus, p.availability)}</span>
                     </span>
                   </button>
                 </li>
-              ))}
+                );
+              })}
               {online.length === 0 && <li className="hub-muted">No one online right now.</li>}
             </ul>
             {online.length > CAP && (

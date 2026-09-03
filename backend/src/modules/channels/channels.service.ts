@@ -263,13 +263,19 @@ export async function listDmsForUser(organizationId: string, userId: string) {
   // that's the other member; for a self-DM (only you), it resolves to you, so
   // "notes to self" shows up in the list too. COALESCE picks the other member
   // if there is one, otherwise falls back to the user themselves.
+  //
+  // Ordered by the most recent message in each DM (newest first) - it used
+  // to be plain alphabetical by name, which meant a DM never moved when a
+  // new message came in. DMs with no messages yet (a fresh "New DM" with
+  // nothing sent) fall to the end, alphabetically among themselves.
   const result = await pool.query(
     `SELECT c.id AS channel_id,
             COALESCE(other.id, me_user.id) AS user_id,
             COALESCE(op.full_name, mp.full_name) AS full_name,
             COALESCE(other.status, me_user.status) AS status,
             COALESCE(op.job_title, mp.job_title) AS job_title,
-            (other.id IS NULL) AS is_self
+            (other.id IS NULL) AS is_self,
+            lm.last_message_at
      FROM channels c
      JOIN channel_members me ON me.channel_id = c.id AND me.user_id = $2
      JOIN users me_user ON me_user.id = $2
@@ -277,8 +283,11 @@ export async function listDmsForUser(organizationId: string, userId: string) {
      LEFT JOIN channel_members them ON them.channel_id = c.id AND them.user_id <> $2
      LEFT JOIN users other ON other.id = them.user_id
      LEFT JOIN employee_profiles op ON op.user_id = other.id
+     LEFT JOIN LATERAL (
+       SELECT MAX(created_at) AS last_message_at FROM messages WHERE channel_id = c.id
+     ) lm ON true
      WHERE c.organization_id = $1 AND c.is_dm = true
-     ORDER BY full_name ASC`,
+     ORDER BY lm.last_message_at DESC NULLS LAST, full_name ASC`,
     [organizationId, userId]
   );
   return result.rows;

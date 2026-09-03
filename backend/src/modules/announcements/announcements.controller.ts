@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { pool } from '../../db/pool';
 import { listAnnouncements, createAnnouncement, getAnnouncement } from './announcements.service';
+import { broadcastToOrg } from '../messaging/realtime';
+import { processAnnouncementMentions } from '../messaging/mentions.service';
+import { runInBackground } from '../../util/background';
 
 // What a viewer is allowed to see: undefined for a full admin (no filter -
 // they see every announcement in the org), otherwise their own
@@ -63,6 +66,29 @@ export async function create(req: Request, res: Response) {
       content: content.trim(),
       createdBy: req.user!.userId,
     });
+
+    // This never pushed live before, on either platform - it only ever
+    // showed up on next load. Broadcasting org-wide (not scoped to the
+    // announcement's department) matches how reactions on announcements
+    // already broadcast - the REST list/detail endpoints are still what
+    // enforce who's actually allowed to see it; this is just "hey,
+    // something changed, worth refetching" for anyone with the hub open.
+    broadcastToOrg(req.user!.organizationId, 'announcement:new', announcement);
+
+    // @mentions in an announcement never notified anyone before either -
+    // genuinely new, not a fix. Wrapped in runInBackground since this does
+    // its own database writes (creating notifications) that shouldn't
+    // race the response the way a live broadcast alone safely can.
+    runInBackground(
+      processAnnouncementMentions(
+        announcement.id,
+        req.user!.organizationId,
+        departmentId || null,
+        req.user!.userId,
+        content.trim()
+      )
+    );
+
     return res.status(201).json({ announcement });
   } catch (err: any) {
     if (err.message === 'DEPARTMENT_NOT_IN_ORG') {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { channelsApi, messagesApi, reactionsApi, directoryApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
 import { statusColor, statusLabel } from '../util/status';
+import { useLivePresence } from '../context/PresenceContext';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -17,12 +18,13 @@ interface ChannelViewProps {
   onOpenDm?: (userId: string, name: string) => void; // open a DM (from a profile)
   onBack?: () => void; // mobile: return to the Company Hub
   onLeftChannel?: () => void; // called after successfully leaving a group channel
+  onDmActivity?: () => void; // called after sending in a DM, so the sidebar can reorder it to the top
 }
 
 // The live conversation for one channel. History loads over REST; new
 // messages arrive over the socket. This mirrors the backend split exactly:
 // REST for reading the past, WebSocket for the live present.
-export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOpenDm, onBack, onLeftChannel }: ChannelViewProps) {
+export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOpenDm, onBack, onLeftChannel, onDmActivity }: ChannelViewProps) {
   const socket = useSocket();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -41,8 +43,21 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   // don't need this check - you can't view one you're not part of) and
   // the initial render never flash a false "not a member" state.
   const [isMember, setIsMember] = useState(true);
+  // Full channel member list, kept for the @mention autocomplete below -
+  // reuses the same fetch that already ran to check isMember, just also
+  // keeps the full list instead of throwing it away.
+  const [channelMembers, setChannelMembers] = useState<import('../api/resources').ChannelMember[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionActiveIndex, setMentionActiveIndex] = useState(0);
+  const composerInputRef = useRef<HTMLInputElement>(null);
   const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [dmStatus, setDmStatus] = useState<{ status: string; availability: string | null } | null>(null);
+  // Live online/offline, same idea as the existing availability:update
+  // handling just below - that one patches availability into dmStatus
+  // directly; this one overrides just the online/offline portion at
+  // render time instead, since presence now lives in its own shared
+  // context (see PresenceContext.tsx) rather than being refetched here.
+  const liveDmStatus = useLivePresence(dmUserId, dmStatus?.status);
   // When did the OTHER person in this DM last read it - drives the
   // Sent/Seen tick on your own most recent message. Only meaningful for a
   // 1:1 DM, not a group channel (there's no single "seen by" there).
@@ -156,7 +171,10 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     }
     let cancelled = false;
     channelsApi.members(channel.id).then((d) => {
-      if (!cancelled) setIsMember(d.members.some((m) => m.id === user?.id));
+      if (!cancelled) {
+        setIsMember(d.members.some((m) => m.id === user?.id));
+        setChannelMembers(d.members);
+      }
     }).catch(() => {
       // best-effort; if this fails, leave isMember at its current value
       // rather than wrongly locking someone out of a channel they're in
@@ -174,7 +192,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
 
     function onNew(msg: Message) {
       if (msg.channel_id === channel.id) {
-        setMessages((prev) => [...prev, msg]);
+        // Dedup by id: your own sent message is already appended locally
+        // by send() the moment the REST call returns - if a live socket
+        // ALSO echoes it back (once Stage 3 adds that), this stops it
+        // from showing up twice.
+        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
       }
     }
     // An edit or delete from anyone: replace the message in place.
@@ -388,35 +410,125 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
 
   function send() {
     const content = draft.trim();
-    if (!content || !socket) return;
+    if (!content) return;
     if (!isMember) {
       showToast(`Join #${channel.name} to send messages.`, { type: 'error' });
       return;
     }
-    // The server acks every send with either nothing (success) or an
-    // { error } object - e.g. "you're not a member anymore". That ack was
-    // never being read before, so a rejected send just silently vanished
-    // with the draft cleared and no explanation. Now it's surfaced as a
-    // toast, and the draft is restored so nothing typed gets lost.
+    // REST, not socket.emit - sending used to be socket-only, which meant
+    // it didn't work AT ALL (not just "no live push") on any deploy
+    // target without a socket server running yet. This works everywhere,
+    // with or without a live connection, and the sender's own message is
+    // appended locally from the response rather than waiting to hear it
+    // echoed back over a socket. Once a socket server IS present, the
+    // dedup-by-id check in the message:new handler above stops it from
+    // appearing twice when both this and the live broadcast arrive.
     const sentContent = content;
-    socket.emit('message:send', { channelId: channel.id, content }, (res?: { error?: string }) => {
-      if (res?.error) {
-        showToast(res.error, { type: 'error' });
-        setDraft((current) => current || sentContent);
-      }
-    });
-    socket.emit('typing:stop', channel.id);
     setDraft('');
+    socket?.emit('typing:stop', channel.id);
+    messagesApi.send(channel.id, sentContent)
+      .then(({ message }) => {
+        setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+        // Move this DM to the top of the sidebar - it used to only ever
+        // sort alphabetically, so sending a message never reflected as
+        // "this is the most recent conversation" the way it should.
+        if (dmTitle) onDmActivity?.();
+      })
+      .catch((err: any) => {
+        showToast(err?.message || 'Could not send that message.', { type: 'error' });
+        setDraft((current) => current || sentContent);
+      });
   }
 
-  function handleTyping(value: string) {
+  function handleTyping(value: string, cursorPos: number) {
     setDraft(value);
-    if (!socket) return;
-    socket.emit('typing:start', channel.id);
-    if (typingTimeout.current) clearTimeout(typingTimeout.current);
-    typingTimeout.current = setTimeout(() => {
-      socket.emit('typing:stop', channel.id);
-    }, 1500);
+    if (socket) {
+      socket.emit('typing:start', channel.id);
+      if (typingTimeout.current) clearTimeout(typingTimeout.current);
+      typingTimeout.current = setTimeout(() => {
+        socket.emit('typing:stop', channel.id);
+      }, 1500);
+    }
+
+    // Detect an active @mention right before the cursor - the last "@" at
+    // the start of the current word, with nothing but the partial name
+    // between it and the cursor. "hey @ar" -> query "ar"; move the cursor
+    // past a space and it's no longer active.
+    const upToCursor = value.slice(0, cursorPos);
+    const match = upToCursor.match(/(?:^|\s)@([A-Za-z.'-]*)$/);
+    if (match) {
+      setMentionQuery(match[1]);
+      setMentionActiveIndex(0);
+    } else {
+      setMentionQuery(null);
+    }
+  }
+
+  // Matches, closest-first: starts-with on the first name beats a match
+  // anywhere else in the full name, so "@are" surfaces "Arehone" ahead of
+  // someone whose surname happens to contain "are". Capped at 6 so the
+  // dropdown never gets unwieldy. Never suggests yourself - self-mention
+  // isn't a real use case here.
+  const mentionMatches = (() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return channelMembers
+      .filter((m) => m.id !== user?.id && m.full_name)
+      .map((m) => {
+        const full = (m.full_name as string).toLowerCase();
+        const first = full.split(' ')[0];
+        if (first.startsWith(q)) return { member: m, rank: 0 };
+        if (full.includes(q)) return { member: m, rank: 1 };
+        return null;
+      })
+      .filter((x): x is { member: typeof channelMembers[number]; rank: number } => x !== null)
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 6)
+      .map((x) => x.member);
+  })();
+
+  // Replace the "@partial" text right before the cursor with the full
+  // mention (first name only, matching how the backend actually matches
+  // mentions - see mentions.service.ts) and put the cursor right after it.
+  function selectMention(member: import('../api/resources').ChannelMember) {
+    const input = composerInputRef.current;
+    const cursorPos = input?.selectionStart ?? draft.length;
+    const upToCursor = draft.slice(0, cursorPos);
+    const afterCursor = draft.slice(cursorPos);
+    const firstName = (member.full_name || '').split(' ')[0];
+    const replaced = upToCursor.replace(/@([A-Za-z.'-]*)$/, `@${firstName} `);
+    setDraft(replaced + afterCursor);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(replaced.length, replaced.length);
+    });
+  }
+
+  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (mentionQuery !== null && mentionMatches.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionActiveIndex((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionActiveIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        selectMention(mentionMatches[mentionActiveIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionQuery(null);
+        return;
+      }
+    }
+    if (e.key === 'Enter') send();
   }
 
   return (
@@ -440,8 +552,8 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
             </button>
             {dmStatus && (
               <span className="chan-dm-status">
-                <span className="chan-dm-status-dot" style={{ background: statusColor(dmStatus.status, dmStatus.availability) }} />
-                {statusLabel(dmStatus.status, dmStatus.availability)}
+                <span className="chan-dm-status-dot" style={{ background: statusColor(liveDmStatus || 'offline', dmStatus.availability) }} />
+                {statusLabel(liveDmStatus || 'offline', dmStatus.availability)}
               </span>
             )}
           </div>
@@ -620,11 +732,37 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
 
       {isMember ? (
         <div className="chan-composer">
+          {mentionQuery !== null && mentionMatches.length > 0 && (
+            <ul className="chan-mention-dropdown">
+              {mentionMatches.map((m, i) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    className={`chan-mention-option ${i === mentionActiveIndex ? 'is-active' : ''}`}
+                    // onMouseDown, not onClick - fires before the input's
+                    // onBlur, so clicking a suggestion inserts it instead
+                    // of just closing the dropdown as the input loses focus.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      selectMention(m);
+                    }}
+                  >
+                    <span className="chan-mention-avatar" style={{ background: colorFor(m.id) }}>
+                      {(m.full_name || '?').charAt(0).toUpperCase()}
+                    </span>
+                    <span className="chan-mention-name">{m.full_name}</span>
+                    {m.job_title && <span className="chan-mention-title">{m.job_title}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="chan-composer-inner">
             <input
+              ref={composerInputRef}
               value={draft}
-              onChange={(e) => handleTyping(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && send()}
+              onChange={(e) => handleTyping(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+              onKeyDown={handleComposerKeyDown}
               placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
             />
             <button onClick={send} disabled={!draft.trim()}>Send</button>

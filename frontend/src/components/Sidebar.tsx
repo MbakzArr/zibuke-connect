@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { channelsApi, type Channel, type Dm } from '../api/resources';
 import { useNotifications } from '../context/NotificationsContext';
 import { useSocket } from '../context/SocketContext';
+import { usePresenceMap } from '../context/PresenceContext';
 import MiniCalendar from './MiniCalendar';
 
 interface SidebarProps {
@@ -44,6 +45,7 @@ export default function Sidebar({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const { unreadDmChannelIds } = useNotifications();
   const socket = useSocket();
+  const presenceMap = usePresenceMap();
   // Channels flagged unread LIVE by the socket, on top of what the last
   // fetch said. Cleared the moment the user opens that channel.
   const [liveUnread, setLiveUnread] = useState<Set<string>>(new Set());
@@ -52,11 +54,18 @@ export default function Sidebar({
     if (!socket) return;
     function onActivity(p: { channelId: string }) {
       setLiveUnread((prev) => new Set(prev).add(p.channelId));
+      // Also re-sort the DM list live - previously this only flagged the
+      // unread dot, so a DM you already had marked read (or one that
+      // wasn't unread at all, e.g. you're not currently in it but it's
+      // not flagged unread for some other reason) wouldn't visibly move
+      // to the top just because new activity came in.
+      loadDms();
     }
     socket.on('channel:activity', onActivity);
     return () => {
       socket.off('channel:activity', onActivity);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   async function loadChannels() {
@@ -180,7 +189,7 @@ export default function Sidebar({
                   className={`side-item side-dm-item ${activeView === dm.channel_id ? 'is-active' : ''} ${hasUnread ? 'has-unread' : ''}`}
                   onClick={() => onSelectDm(dm.channel_id, label, dm.user_id)}
                 >
-                  <span className={`side-dm-dot ${dm.status === 'online' ? 'is-on' : ''}`} />
+                  <span className={`side-dm-dot ${(presenceMap.get(dm.user_id) ?? dm.status) === 'online' ? 'is-on' : ''}`} />
                   <span className="side-dm-name">{dm.full_name || 'Unknown'}{dm.is_self ? ' (you)' : ''}</span>
                   {hasUnread && <span className="side-unread-dot" />}
                 </button>

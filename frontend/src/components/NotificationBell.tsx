@@ -62,6 +62,28 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
         clickable: true,
       };
     }
+    if (n.type === 'announcement_mention') {
+      return {
+        title: `You were mentioned in an announcement`,
+        preview: n.announcement_title || null,
+        clickable: true,
+      };
+    }
+    if (n.type === 'reaction') {
+      const emoji = n.reaction_emoji || '';
+      const preview = n.reaction_target_type === 'message'
+        ? n.reaction_message_content
+        : n.reaction_target_type === 'announcement'
+        ? n.reaction_announcement_title
+        : null;
+      return {
+        title: `${n.reactor_name || 'Someone'} reacted ${emoji} to your ${n.reaction_target_type === 'birthday' ? 'birthday' : n.reaction_target_type || 'post'}`,
+        preview: preview || null,
+        // No dedicated place to jump to for a reaction - same treatment
+        // as department_head/task_assigned above.
+        clickable: false,
+      };
+    }
     if (n.type === 'event') {
       const timeStr = n.event_starts_at
         ? new Intl.DateTimeFormat('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Johannesburg' }).format(new Date(n.event_starts_at))
@@ -96,7 +118,7 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
   }
 
   function handleClick(n: Notification) {
-    if (n.type === 'announcement') {
+    if (n.type === 'announcement' || n.type === 'announcement_mention') {
       onOpenAnnouncement(n.source_id);
       setOpen(false);
       return;

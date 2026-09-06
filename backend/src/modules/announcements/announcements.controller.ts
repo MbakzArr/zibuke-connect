@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { pool } from '../../db/pool';
 import { listAnnouncements, createAnnouncement, getAnnouncement } from './announcements.service';
-import { broadcastToOrg } from '../messaging/realtime';
+import { emitToUser } from '../messaging/realtime';
 import { processAnnouncementMentions } from '../messaging/mentions.service';
 import { runInBackground } from '../../util/background';
 
@@ -59,7 +59,7 @@ export async function create(req: Request, res: Response) {
       departmentId = ownDepartmentId;
     }
 
-    const announcement = await createAnnouncement({
+    const { announcement, audienceUserIds } = await createAnnouncement({
       organizationId: req.user!.organizationId,
       departmentId,
       title: title.trim(),
@@ -67,13 +67,15 @@ export async function create(req: Request, res: Response) {
       createdBy: req.user!.userId,
     });
 
-    // This never pushed live before, on either platform - it only ever
-    // showed up on next load. Broadcasting org-wide (not scoped to the
-    // announcement's department) matches how reactions on announcements
-    // already broadcast - the REST list/detail endpoints are still what
-    // enforce who's actually allowed to see it; this is just "hey,
-    // something changed, worth refetching" for anyone with the hub open.
-    broadcastToOrg(req.user!.organizationId, 'announcement:new', announcement);
+    // Push live only to the people who are actually allowed to see this -
+    // this used to broadcast to the whole org regardless of department
+    // scope, which meant a department-only announcement appeared live for
+    // everyone, even outside that department, even though the REST
+    // endpoints correctly filtered it on a refresh. Now the live push uses
+    // the exact same audience, computed the same way, as the notifications.
+    for (const userId of audienceUserIds) {
+      emitToUser(userId, 'announcement:new', announcement);
+    }
 
     // @mentions in an announcement never notified anyone before either -
     // genuinely new, not a fix. Wrapped in runInBackground since this does

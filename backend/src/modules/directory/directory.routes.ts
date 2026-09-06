@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/requireAuth';
-import { search, list, profile, updateMe, birthdays } from './directory.controller';
+import { search, list, profile, updateMe, updateTitle, birthdays } from './directory.controller';
 
 const router = Router();
 
@@ -13,5 +13,6 @@ router.patch('/me', updateMe);
 router.get('/birthdays', birthdays);
 router.get('/', list);
 router.get('/:id', profile);
+router.patch('/:id/title', updateTitle);
 
 export default router;

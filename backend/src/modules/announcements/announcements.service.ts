@@ -67,26 +67,27 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
   );
   const announcement = result.rows[0];
 
-  // Work out the audience and notify them. Org-wide hits everyone in the
-  // org; department-scoped hits only that department's members. The author
-  // is excluded, they don't need to be notified of their own post.
-  let audience;
-  if (departmentId) {
-    audience = await pool.query(
-      `SELECT id FROM users WHERE organization_id = $1 AND department_id = $2 AND id <> $3`,
-      [organizationId, departmentId, createdBy]
-    );
-  } else {
-    audience = await pool.query(
-      `SELECT id FROM users WHERE organization_id = $1 AND id <> $2`,
-      [organizationId, createdBy]
-    );
-  }
+  // Work out the audience: org-wide hits everyone in the org, department-
+  // scoped hits only that department's members. This same list drives BOTH
+  // the live push and the notifications - it has to match the REST
+  // endpoints' filtering exactly, or a department-scoped announcement can
+  // leak to people outside it over the live socket push even though the
+  // REST list/detail endpoints correctly hide it from them. (Includes the
+  // author, so their own post appears live for them too - filtered out
+  // below just for notifications, since you don't need to be notified of
+  // your own post.)
+  const audience = departmentId
+    ? await pool.query(
+        `SELECT id FROM users WHERE organization_id = $1 AND department_id = $2`,
+        [organizationId, departmentId]
+      )
+    : await pool.query(`SELECT id FROM users WHERE organization_id = $1`, [organizationId]);
 
-  const userIds = audience.rows.map((r) => r.id);
-  await createNotificationsForMany(userIds, 'announcement', announcement.id);
+  const audienceUserIds = audience.rows.map((r) => r.id);
+  const notifyUserIds = audienceUserIds.filter((id) => id !== createdBy);
+  await createNotificationsForMany(notifyUserIds, 'announcement', announcement.id);
 
-  return announcement;
+  return { announcement, audienceUserIds };
 }
 
 // Fetch a single announcement by id, scoped to the caller's org AND their

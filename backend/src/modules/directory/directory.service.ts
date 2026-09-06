@@ -101,10 +101,12 @@ export async function getProfile(organizationId: string, userId: string) {
 
 // Let a user update their OWN profile. Only these fields, never role,
 // department assignment, employee_number or national_id, those are
-// admin-controlled, not self-service.
+// admin-controlled, not self-service. Job title used to be self-service
+// too, but Anja flagged that anyone could set their own title to
+// whatever they liked - it's now admin/department-admin only, via
+// updateJobTitle below.
 interface UpdateProfileInput {
   fullName?: string;
-  jobTitle?: string;
   phone?: string;
   address?: string;
   linkedinUrl?: string;
@@ -116,19 +118,17 @@ export async function updateOwnProfile(userId: string, input: UpdateProfileInput
   const result = await pool.query(
     `UPDATE employee_profiles
      SET full_name     = COALESCE($2, full_name),
-         job_title     = COALESCE($3, job_title),
-         phone         = COALESCE($4, phone),
-         address       = COALESCE($5, address),
-         linkedin_url  = COALESCE($6, linkedin_url),
-         timezone      = COALESCE($7, timezone),
-         date_of_birth = COALESCE($8::date, date_of_birth)
+         phone         = COALESCE($3, phone),
+         address       = COALESCE($4, address),
+         linkedin_url  = COALESCE($5, linkedin_url),
+         timezone      = COALESCE($6, timezone),
+         date_of_birth = COALESCE($7::date, date_of_birth)
      WHERE user_id = $1
      RETURNING user_id, full_name, job_title, phone, address, linkedin_url, timezone,
                TO_CHAR(date_of_birth, 'YYYY-MM-DD') AS date_of_birth`,
     [
       userId,
       input.fullName ?? null,
-      input.jobTitle ?? null,
       input.phone ?? null,
       input.address ?? null,
       input.linkedinUrl ?? null,
@@ -137,6 +137,37 @@ export async function updateOwnProfile(userId: string, input: UpdateProfileInput
     ]
   );
   return result.rows[0];
+}
+
+// The department a user belongs to, org-scoped. Used to check whether a
+// department_admin is allowed to edit a given person's title - they can
+// only edit people in their own department, so this gets called for both
+// the caller and the target and the two are compared.
+export async function getUserDepartmentId(organizationId: string, userId: string): Promise<{ found: boolean; departmentId: string | null }> {
+  const result = await pool.query(
+    'SELECT department_id FROM users WHERE id = $1 AND organization_id = $2',
+    [userId, organizationId]
+  );
+  if (result.rows.length === 0) return { found: false, departmentId: null };
+  return { found: true, departmentId: result.rows[0].department_id };
+}
+
+// Set someone else's job title. Org-scoped so one org can never touch
+// another's data; the actual admin-vs-department-admin permission check
+// (and the department_admin-can-only-edit-their-own-department rule)
+// happens in the controller, using getUserDepartmentId above - this
+// function just performs the write once that's already been decided.
+export async function updateJobTitle(organizationId: string, targetUserId: string, jobTitle: string) {
+  const result = await pool.query(
+    `UPDATE employee_profiles
+     SET job_title = $1
+     WHERE user_id = $2
+       AND user_id IN (SELECT id FROM users WHERE organization_id = $3)
+     RETURNING user_id, full_name, job_title, phone, address, linkedin_url, timezone,
+               TO_CHAR(date_of_birth, 'YYYY-MM-DD') AS date_of_birth`,
+    [jobTitle, targetUserId, organizationId]
+  );
+  return result.rows[0] || null;
 }
 
 // People in the org whose birthday is TODAY (matched on month + day, any

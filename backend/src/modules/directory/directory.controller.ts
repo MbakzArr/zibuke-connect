@@ -4,6 +4,8 @@ import {
   listDirectory,
   getProfile,
   updateOwnProfile,
+  updateJobTitle,
+  getUserDepartmentId,
   birthdaysToday,
 } from './directory.service';
 
@@ -60,10 +62,11 @@ export async function profile(req: Request, res: Response) {
 
 export async function updateMe(req: Request, res: Response) {
   try {
-    const { fullName, jobTitle, phone, address, linkedinUrl, timezone, dateOfBirth } = req.body;
+    // jobTitle is deliberately not accepted here even if a client sends
+    // it - see updateTitle below for who's actually allowed to set it.
+    const { fullName, phone, address, linkedinUrl, timezone, dateOfBirth } = req.body;
     const updated = await updateOwnProfile(req.user!.userId, {
       fullName,
-      jobTitle,
       phone,
       address,
       linkedinUrl,
@@ -74,6 +77,46 @@ export async function updateMe(req: Request, res: Response) {
   } catch (err) {
     console.error('Update own profile error:', err);
     return res.status(500).json({ error: 'Could not update your profile' });
+  }
+}
+
+// Set someone else's job title. Admins can edit anyone in the org; a
+// department_admin can only edit people in their own department - same
+// scoping rule as posting a department announcement. Employees can't
+// reach this at all, and can no longer set their own title either (see
+// updateMe above) - both were Anja's call after seeing it could be set
+// to anything, by anyone, in the demo.
+export async function updateTitle(req: Request, res: Response) {
+  try {
+    if (req.user!.role !== 'admin' && req.user!.role !== 'department_admin') {
+      return res.status(403).json({ error: 'Only an admin or department admin can change someone\u2019s job title' });
+    }
+    const { jobTitle } = req.body;
+    if (typeof jobTitle !== 'string' || jobTitle.trim().length === 0) {
+      return res.status(400).json({ error: 'jobTitle is required' });
+    }
+
+    if (req.user!.role === 'department_admin') {
+      const [caller, target] = await Promise.all([
+        getUserDepartmentId(req.user!.organizationId, req.user!.userId),
+        getUserDepartmentId(req.user!.organizationId, req.params.id),
+      ]);
+      if (!target.found) {
+        return res.status(404).json({ error: 'Person not found' });
+      }
+      if (!caller.departmentId || caller.departmentId !== target.departmentId) {
+        return res.status(403).json({ error: 'You can only edit job titles for people in your own department' });
+      }
+    }
+
+    const updated = await updateJobTitle(req.user!.organizationId, req.params.id, jobTitle.trim());
+    if (!updated) {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+    return res.json({ profile: updated });
+  } catch (err) {
+    console.error('Update job title error:', err);
+    return res.status(500).json({ error: 'Could not update job title' });
   }
 }
 

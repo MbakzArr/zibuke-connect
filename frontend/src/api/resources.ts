@@ -254,13 +254,14 @@ export const directoryApi = {
   profile: (userId: string) => apiRequest<{ profile: FullProfile }>(`/api/v1/directory/${userId}`),
   updateMe: (input: {
     fullName?: string;
-    jobTitle?: string;
     phone?: string;
     address?: string;
     linkedinUrl?: string;
     timezone?: string;
     dateOfBirth?: string;
   }) => apiRequest<{ profile: FullProfile }>('/api/v1/directory/me', { method: 'PATCH', body: input }),
+  updateTitle: (userId: string, jobTitle: string) =>
+    apiRequest<{ profile: FullProfile }>(`/api/v1/directory/${userId}/title`, { method: 'PATCH', body: { jobTitle } }),
 };
 
 export interface AdminUser {

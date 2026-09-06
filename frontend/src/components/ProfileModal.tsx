@@ -41,15 +41,24 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [editing, setEditing] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
-  const [form, setForm] = useState({ jobTitle: '', phone: '', address: '', linkedinUrl: '', timezone: '', dateOfBirth: '' });
+  const [form, setForm] = useState({ phone: '', address: '', linkedinUrl: '', timezone: '', dateOfBirth: '' });
   const [saving, setSaving] = useState(false);
   const isMe = userId === user?.id;
+
+  // Job title editing is a separate, smaller flow from the rest of the
+  // profile - it's not self-service (see directory.controller.ts), it's
+  // admin or department_admin editing someone ELSE's title. Kept as its
+  // own bit of state rather than folded into the big self-edit form above,
+  // since the two have completely different permission rules.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
+  const canEditTitle = !isMe && (user?.role === 'admin' || user?.role === 'department_admin');
 
   useEffect(() => {
     directoryApi.profile(userId).then((d) => {
       setProfile(d.profile);
       setForm({
-        jobTitle: d.profile.job_title || '',
         phone: d.profile.phone || '',
         address: d.profile.address || '',
         linkedinUrl: d.profile.linkedin_url || '',
@@ -59,11 +68,29 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
     });
   }, [userId]);
 
+  async function saveTitle() {
+    setSavingTitle(true);
+    try {
+      const { profile: updated } = await directoryApi.updateTitle(userId, titleInput.trim());
+      setProfile(updated);
+      setEditingTitle(false);
+      showToast('Job title updated.', { type: 'success' });
+    } catch (err: any) {
+      // A department_admin trying to edit someone outside their own
+      // department lands here with a clear 403 from the backend - the
+      // button is shown to any department_admin regardless (there's no
+      // department info on the client's own user object to pre-filter
+      // with), so this is where that gets caught and explained.
+      showToast(err?.message || 'Could not update job title.', { type: 'error' });
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
   async function save() {
     setSaving(true);
     try {
       const { profile: updated } = await directoryApi.updateMe({
-        jobTitle: form.jobTitle.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
         linkedinUrl: form.linkedinUrl.trim(),
@@ -97,7 +124,33 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
               </span>
               <div>
                 <div className="profile-name">{profile.full_name || profile.email}</div>
-                {profile.job_title && <div className="profile-role">{profile.job_title}</div>}
+                {editingTitle ? (
+                  <div className="profile-title-edit">
+                    <input
+                      value={titleInput}
+                      onChange={(e) => setTitleInput(e.target.value)}
+                      placeholder="e.g. QA Engineer"
+                      autoFocus
+                    />
+                    <button className="hub-post-cancel" onClick={() => setEditingTitle(false)} disabled={savingTitle}>Cancel</button>
+                    <button className="hub-post-send" onClick={saveTitle} disabled={savingTitle}>{savingTitle ? 'Saving...' : 'Save'}</button>
+                  </div>
+                ) : (
+                  <>
+                    {profile.job_title && <div className="profile-role">{profile.job_title}</div>}
+                    {canEditTitle && (
+                      <button
+                        className="profile-title-edit-btn"
+                        onClick={() => {
+                          setTitleInput(profile.job_title || '');
+                          setEditingTitle(true);
+                        }}
+                      >
+                        {profile.job_title ? 'Edit title' : 'Set title'}
+                      </button>
+                    )}
+                  </>
+                )}
                 {profile.heads_department_name && (
                   <div className="profile-head-badge">🏢 Head of {profile.heads_department_name}</div>
                 )}
@@ -110,9 +163,6 @@ export default function ProfileModal({ userId, onClose, onMessage }: ProfileModa
 
             {editing ? (
               <div className="profile-edit-form">
-                <label>Job title
-                  <input value={form.jobTitle} onChange={(e) => setForm((f) => ({ ...f, jobTitle: e.target.value }))} placeholder="e.g. QA Engineer" />
-                </label>
                 <label>Phone
                   <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="e.g. 082 123 4567" />
                 </label>

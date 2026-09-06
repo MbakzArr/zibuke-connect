@@ -782,6 +782,19 @@
 }
 .profile-name { font-size: 17px; font-weight: 650; }
 .profile-role { font-size: 14px; color: var(--ink-soft); }
+.profile-title-edit-btn {
+  background: none; border: none; padding: 0; margin-top: 2px;
+  font-size: 12px; color: var(--indigo-600); font-weight: 600; cursor: pointer;
+}
+.profile-title-edit-btn:hover { text-decoration: underline; }
+.profile-title-edit {
+  display: flex; align-items: center; gap: 6px; margin-top: 2px;
+}
+.profile-title-edit input {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; width: 160px;
+}
+.profile-title-edit button { padding: 5px 10px; font-size: 12px; }
 .profile-head-badge {
   display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700;
   color: var(--indigo-700); background: var(--indigo-50); padding: 2px 9px; border-radius: 10px;

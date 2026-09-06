@@ -99,8 +99,8 @@ async function hydrateOne(n: any) {
               ann.title AS reaction_announcement_title
        FROM reactions r
        LEFT JOIN employee_profiles reactor ON reactor.user_id = r.user_id
-       LEFT JOIN messages msg ON msg.id = r.target_id AND r.target_type = 'message'
-       LEFT JOIN announcements ann ON ann.id = r.target_id AND r.target_type = 'announcement'
+       LEFT JOIN messages msg ON msg.id = r.target_id::uuid AND r.target_type = 'message'
+       LEFT JOIN announcements ann ON ann.id = r.target_id::uuid AND r.target_type = 'announcement'
        WHERE r.id = $1`,
       [n.source_id]
     );
@@ -181,9 +181,9 @@ export async function listNotifications(userId: string, unreadOnly = false) {
      LEFT JOIN employee_profiles reactor
        ON reactor.user_id = rxn.user_id
      LEFT JOIN messages rxn_msg
-       ON rxn_msg.id = rxn.target_id AND rxn.target_type = 'message'
+       ON rxn_msg.id = rxn.target_id::uuid AND rxn.target_type = 'message'
      LEFT JOIN announcements rxn_ann
-       ON rxn_ann.id = rxn.target_id AND rxn.target_type = 'announcement'
+       ON rxn_ann.id = rxn.target_id::uuid AND rxn.target_type = 'announcement'
      WHERE n.user_id = $1
        ${unreadOnly ? 'AND n.is_read = false' : ''}
      ORDER BY n.created_at DESC

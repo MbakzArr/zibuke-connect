@@ -8,6 +8,7 @@ export interface Channel {
   id: string;
   name: string;
   department_id: string | null;
+  department_name?: string | null;
   is_private: boolean;
   created_by: string;
   created_at: string;
@@ -89,6 +90,9 @@ export interface Notification {
   reactor_name?: string | null;
   reaction_message_content?: string | null;
   reaction_announcement_title?: string | null;
+  join_requester_name?: string | null;
+  join_channel_id?: string | null;
+  join_channel_name?: string | null;
 }
 
 
@@ -96,10 +100,20 @@ export interface BrowsableChannel {
   id: string;
   name: string;
   department_id: string | null;
+  department_name?: string | null;
   is_private: boolean;
   created_at: string;
   member_count: string;
   is_member: boolean;
+  has_pending_request: boolean;
+}
+
+export interface JoinRequest {
+  id: string;
+  user_id: string;
+  requested_at: string;
+  full_name: string | null;
+  email: string;
 }
 
 export interface MessageSearchResult {
@@ -168,13 +182,28 @@ export interface FullProfile {
 
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
-  create: (name: string, isPrivate = false) =>
+  create: (name: string, isPrivate = false, departmentId?: string | null) =>
     apiRequest<{ channel: Channel }>('/api/v1/channels', {
       method: 'POST',
-      body: { name, isPrivate },
+      body: { name, isPrivate, departmentId },
     }),
+  // Public channels are request-to-join now, not instant - see
+  // requestToJoin in the backend. The three statuses: already in the
+  // channel (rare - the UI shouldn't normally show Join for a channel
+  // you're already in), a request was just created, or you already had
+  // one pending (clicking Join twice is harmless, not an error).
   join: (id: string) =>
-    apiRequest(`/api/v1/channels/${id}/join`, { method: 'POST' }),
+    apiRequest<{ status: 'already_member' | 'requested' | 'already_requested'; requestId?: string }>(
+      `/api/v1/channels/${id}/join`,
+      { method: 'POST' }
+    ),
+  listJoinRequests: (channelId: string) =>
+    apiRequest<{ requests: JoinRequest[] }>(`/api/v1/channels/${channelId}/join-requests`),
+  respondToJoinRequest: (channelId: string, requestId: string, decision: 'approved' | 'rejected') =>
+    apiRequest<{ channelId: string; decision: string }>(
+      `/api/v1/channels/${channelId}/join-requests/${requestId}`,
+      { method: 'POST', body: { decision } }
+    ),
   // Leaving a DM is how "delete this conversation" works: it removes you
   // from the channel's membership, so it drops out of your DM list. The
   // other person keeps their side and their history untouched. If you

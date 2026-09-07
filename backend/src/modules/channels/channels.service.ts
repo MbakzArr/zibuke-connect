@@ -1,4 +1,7 @@
 import { pool } from '../../db/pool';
+import { createNotification } from '../notifications/notifications.service';
+import { runInBackground } from '../../util/background';
+import { emitToUser } from '../messaging/realtime';
 
 // A direct message is not a separate concept in this system, it's just a
 // private channel with is_dm = true and exactly two members. That means
@@ -18,7 +21,7 @@ interface CreateChannelInput {
 // here, they're fetched separately so the channel list stays clean.
 export async function listChannelsForUser(organizationId: string, userId: string) {
   const result = await pool.query(
-    `SELECT DISTINCT c.id, c.name, c.department_id, c.is_private, c.created_by, c.created_at,
+    `SELECT DISTINCT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_by, c.created_at,
             (SELECT COUNT(*) FROM channel_members cm2 WHERE cm2.channel_id = c.id) AS member_count,
             EXISTS (
               SELECT 1 FROM messages m
@@ -32,6 +35,7 @@ export async function listChannelsForUser(organizationId: string, userId: string
             ) AS has_unread
      FROM channels c
      LEFT JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
+     LEFT JOIN departments d ON d.id = c.department_id
      WHERE c.organization_id = $1
        AND c.is_dm = false
        AND (c.is_private = false OR cm.user_id IS NOT NULL)
@@ -72,9 +76,10 @@ export async function getDmOtherReadAt(channelId: string, userId: string) {
 
 export async function getChannel(organizationId: string, channelId: string) {
   const result = await pool.query(
-    `SELECT id, name, department_id, is_private, is_dm, created_by, created_at
-     FROM channels
-     WHERE organization_id = $1 AND id = $2`,
+    `SELECT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.is_dm, c.created_by, c.created_at
+     FROM channels c
+     LEFT JOIN departments d ON d.id = c.department_id
+     WHERE c.organization_id = $1 AND c.id = $2`,
     [organizationId, channelId]
   );
   return result.rows[0] || null;
@@ -131,24 +136,134 @@ export async function createChannel(input: CreateChannelInput) {
   }
 }
 
-export async function joinChannel(organizationId: string, channelId: string, userId: string) {
-  const channel = await getChannel(organizationId, channelId);
-  if (!channel) {
-    throw new Error('NOT_FOUND');
-  }
-  // You can't self-join a private channel or a DM, those are invite-only.
-  if (channel.is_private || channel.is_dm) {
-    throw new Error('CANNOT_SELF_JOIN');
-  }
-
-  // ON CONFLICT DO NOTHING makes re-joining harmless instead of an error.
+// The actual membership write - shared by request-approval and any other
+// path that adds someone to a channel. Not called directly by the join
+// route anymore; see requestToJoin below for that.
+async function addMember(channelId: string, userId: string) {
   await pool.query(
     `INSERT INTO channel_members (channel_id, user_id)
      VALUES ($1, $2)
      ON CONFLICT (channel_id, user_id) DO NOTHING`,
     [channelId, userId]
   );
-  return true;
+}
+
+// Who should be asked to approve a join request: the channel's creator,
+// unless their account has been removed, in which case it falls back to
+// every admin in the org - a request should never be permanently stuck
+// just because the person who made the channel is gone.
+async function getJoinApprovers(organizationId: string, channelId: string, createdBy: string): Promise<string[]> {
+  const creator = await pool.query(
+    'SELECT id FROM users WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
+    [createdBy, organizationId]
+  );
+  if (creator.rows.length > 0) return [createdBy];
+
+  const admins = await pool.query(
+    `SELECT id FROM users WHERE organization_id = $1 AND role = 'admin' AND deleted_at IS NULL`,
+    [organizationId]
+  );
+  return admins.rows.map((r) => r.id);
+}
+
+// The new front door for joining a public channel - creates a pending
+// request instead of joining immediately, and notifies whoever needs to
+// approve it. Idempotent: already a member -> no-op; already have a
+// pending request -> returns that instead of creating a duplicate (the
+// partial unique index would reject a second one anyway, this just
+// avoids surfacing that as an error to a well-behaved double-click).
+export async function requestToJoin(organizationId: string, channelId: string, userId: string) {
+  const channel = await getChannel(organizationId, channelId);
+  if (!channel) {
+    throw new Error('NOT_FOUND');
+  }
+  if (channel.is_private || channel.is_dm) {
+    throw new Error('CANNOT_SELF_JOIN');
+  }
+
+  const already = await isMember(channelId, userId);
+  if (already) {
+    return { status: 'already_member' as const };
+  }
+
+  const existing = await pool.query(
+    `SELECT id FROM channel_join_requests WHERE channel_id = $1 AND user_id = $2 AND status = 'pending'`,
+    [channelId, userId]
+  );
+  if (existing.rows.length > 0) {
+    return { status: 'already_requested' as const, requestId: existing.rows[0].id };
+  }
+
+  const inserted = await pool.query(
+    `INSERT INTO channel_join_requests (channel_id, user_id) VALUES ($1, $2) RETURNING id`,
+    [channelId, userId]
+  );
+  const requestId = inserted.rows[0].id;
+
+  const approvers = await getJoinApprovers(organizationId, channelId, channel.created_by);
+  for (const approverId of approvers) {
+    runInBackground(createNotification({ userId: approverId, type: 'channel_join_request', sourceId: requestId }));
+  }
+
+  return { status: 'requested' as const, requestId };
+}
+
+// Every pending request for a channel, with the requester's name - what
+// the approval modal renders. Only meaningful for whoever's allowed to
+// see it; the controller checks that before calling this.
+export async function listPendingRequests(channelId: string) {
+  const result = await pool.query(
+    `SELECT r.id, r.user_id, r.requested_at, p.full_name, u.email
+     FROM channel_join_requests r
+     JOIN users u ON u.id = r.user_id
+     LEFT JOIN employee_profiles p ON p.user_id = r.user_id
+     WHERE r.channel_id = $1 AND r.status = 'pending'
+     ORDER BY r.requested_at ASC`,
+    [channelId]
+  );
+  return result.rows;
+}
+
+// Approve or reject a pending request. Only the channel's creator, or an
+// admin if the creator's account is gone, is allowed to call this - the
+// controller checks that (same getJoinApprovers list) before calling in.
+export async function resolveJoinRequest(requestId: string, approverId: string, decision: 'approved' | 'rejected') {
+  const request = await pool.query(
+    `SELECT id, channel_id, user_id, status FROM channel_join_requests WHERE id = $1`,
+    [requestId]
+  );
+  if (request.rows.length === 0) {
+    throw new Error('NOT_FOUND');
+  }
+  const row = request.rows[0];
+  if (row.status !== 'pending') {
+    throw new Error('ALREADY_RESOLVED');
+  }
+
+  await pool.query(
+    `UPDATE channel_join_requests SET status = $1, resolved_at = now(), resolved_by = $2 WHERE id = $3`,
+    [decision, approverId, requestId]
+  );
+
+  if (decision === 'approved') {
+    await addMember(row.channel_id, row.user_id);
+  }
+
+  // Either way, the person who asked deserves to know. sourceId points at
+  // the channel, not the (now-resolved) request row - once resolved, the
+  // request itself is no longer the useful thing to show; the channel is.
+  runInBackground(
+    (async () => {
+      await createNotification({
+        userId: row.user_id,
+        type: decision === 'approved' ? 'channel_join_approved' : 'channel_join_rejected',
+        sourceId: row.channel_id,
+      });
+      emitToUser(row.user_id, 'channel:join_resolved', { channelId: row.channel_id, approved: decision === 'approved' });
+    })()
+  );
+
+  return { channelId: row.channel_id, decision };
 }
 
 export async function leaveChannel(channelId: string, userId: string) {
@@ -313,13 +428,18 @@ export async function getDmRecipient(channelId: string, senderId: string): Promi
 // listed here.
 export async function listBrowsableChannels(organizationId: string, userId: string) {
   const result = await pool.query(
-    `SELECT c.id, c.name, c.department_id, c.is_private, c.created_at,
+    `SELECT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_at,
             (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS member_count,
             EXISTS (
               SELECT 1 FROM channel_members me
               WHERE me.channel_id = c.id AND me.user_id = $2
-            ) AS is_member
+            ) AS is_member,
+            EXISTS (
+              SELECT 1 FROM channel_join_requests jr
+              WHERE jr.channel_id = c.id AND jr.user_id = $2 AND jr.status = 'pending'
+            ) AS has_pending_request
      FROM channels c
+     LEFT JOIN departments d ON d.id = c.department_id
      WHERE c.organization_id = $1
        AND c.is_dm = false
        AND c.is_private = false

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import MembersModal from './MembersModal';
+import JoinRequestsModal from './JoinRequestsModal';
 import ProfileModal from './ProfileModal';
 import Reactions from './Reactions';
 
@@ -35,6 +36,26 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
+  const [showJoinRequests, setShowJoinRequests] = useState(false);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  // Only the channel's creator, or an admin, can see/manage its join
+  // requests - matches the same rule the backend enforces, this just
+  // decides whether to even show the button. DMs don't have requests.
+  const canManageRequests = !dmTitle && !!channel.created_by && (user?.role === 'admin' || channel.created_by === user?.id);
+
+  useEffect(() => {
+    if (!canManageRequests) return;
+    let cancelled = false;
+    channelsApi.listJoinRequests(channel.id).then((d) => {
+      if (!cancelled) setPendingRequestCount(d.requests.length);
+    }).catch(() => {
+      // Not worth surfacing an error for a background badge count.
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.id, canManageRequests]);
   // Whether the CURRENT user is actually a member of this channel. Public
   // channels are always visible/readable in the sidebar whether you've
   // joined or not (that's intentional, same as Slack), but sending
@@ -369,13 +390,27 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   // you've joined or not - this is the one-click way back in, right from
   // the conversation you're already looking at, instead of a detour
   // through Browse Channels.
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+
   async function joinThisChannel() {
     try {
-      await channelsApi.join(channel.id);
-      setIsMember(true);
-      showToast(`Joined #${channel.name}.`, { type: 'success' });
+      const result = await channelsApi.join(channel.id);
+      if (result.status === 'already_member') {
+        setIsMember(true);
+        showToast(`Joined #${channel.name}.`, { type: 'success' });
+        return;
+      }
+      // 'requested' or 'already_requested' - not a member yet, just
+      // waiting on the channel creator (or an admin) to approve.
+      setHasPendingRequest(true);
+      showToast(
+        result.status === 'already_requested'
+          ? "You've already requested to join - waiting on approval."
+          : `Request sent - waiting for approval to join #${channel.name}.`,
+        { type: 'info' }
+      );
     } catch (err: any) {
-      showToast(err?.message || 'Could not join that channel.', { type: 'error' });
+      showToast(err?.message || 'Could not request to join that channel.', { type: 'error' });
     }
   }
 
@@ -567,6 +602,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           {!dmTitle && (
             <button className="chan-members-btn" onClick={() => setShowMembers(true)} title="View members">
               👥 Members
+            </button>
+          )}
+          {canManageRequests && pendingRequestCount > 0 && (
+            <button className="chan-requests-btn" onClick={() => setShowJoinRequests(true)} title="Pending join requests">
+              🔔 Requests <span className="chan-requests-badge">{pendingRequestCount}</span>
             </button>
           )}
           {!dmTitle && (
@@ -771,7 +811,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
       ) : (
         <div className="chan-join-prompt">
           <span>You're not a member of #{channel.name} yet.</span>
-          <button onClick={joinThisChannel}>Join to send messages</button>
+          {hasPendingRequest ? (
+            <button disabled>Request sent - waiting for approval</button>
+          ) : (
+            <button onClick={joinThisChannel}>Request to join</button>
+          )}
         </div>
       )}
 
@@ -784,6 +828,15 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
             setShowMembers(false);
             setProfileUserId(userId);
           }}
+        />
+      )}
+
+      {showJoinRequests && (
+        <JoinRequestsModal
+          channelId={channel.id}
+          channelName={channel.name}
+          onClose={() => setShowJoinRequests(false)}
+          onResolved={() => setPendingRequestCount((n) => Math.max(0, n - 1))}
         />
       )}
 

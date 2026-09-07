@@ -11,6 +11,11 @@ interface NotificationBellProps {
   // Called with the notification's own event fields (already hydrated by
   // the API, no extra fetch needed) to show event details.
   onOpenEvent: (event: { title: string; startsAt: string; venue: string | null }) => void;
+  // Called when a channel_join_request notification is clicked - opens the
+  // approve/reject modal for that channel. Only ever reaches someone who
+  // can actually act on it (the backend only notifies the channel's
+  // creator or an admin in the first place).
+  onOpenJoinRequests: (channelId: string, channelName: string) => void;
 }
 
 // Time for today's notifications, "DD Mon, HH:MM" for anything older - so a
@@ -28,7 +33,7 @@ function formatNotifTime(iso: string): string {
 // Header bell. Shows an unread badge and a dropdown of recent notifications,
 // each with a real preview. Mention and DM items jump to the conversation;
 // announcement and event items open their details.
-export default function NotificationBell({ onNavigateToChannel, onOpenAnnouncement, onOpenEvent }: NotificationBellProps) {
+export default function NotificationBell({ onNavigateToChannel, onOpenAnnouncement, onOpenEvent, onOpenJoinRequests }: NotificationBellProps) {
   const { notifications, unreadCount, markAllRead } = useNotifications();
   const [open, setOpen] = useState(false);
 
@@ -84,6 +89,28 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
         clickable: false,
       };
     }
+    if (n.type === 'channel_join_request') {
+      return {
+        title: `${n.join_requester_name || 'Someone'} wants to join #${n.join_channel_name || 'a channel'}`,
+        preview: 'Tap to approve or decline',
+        clickable: true,
+      };
+    }
+    if (n.type === 'channel_join_approved') {
+      return {
+        title: `You're in #${n.join_channel_name || 'the channel'}`,
+        preview: 'Your request was approved',
+        clickable: true,
+      };
+    }
+    if (n.type === 'channel_join_rejected') {
+      return {
+        title: `Your request to join #${n.join_channel_name || 'a channel'} was declined`,
+        preview: null,
+        // Nowhere useful to send them - they're still not a member.
+        clickable: false,
+      };
+    }
     if (n.type === 'event') {
       const timeStr = n.event_starts_at
         ? new Intl.DateTimeFormat('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Africa/Johannesburg' }).format(new Date(n.event_starts_at))
@@ -125,6 +152,16 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
     }
     if (n.type === 'event' && n.event_title && n.event_starts_at) {
       onOpenEvent({ title: n.event_title, startsAt: n.event_starts_at, venue: n.event_venue || null });
+      setOpen(false);
+      return;
+    }
+    if (n.type === 'channel_join_request' && n.join_channel_id) {
+      onOpenJoinRequests(n.join_channel_id, n.join_channel_name || '');
+      setOpen(false);
+      return;
+    }
+    if (n.type === 'channel_join_approved' && n.join_channel_id) {
+      onNavigateToChannel(n.join_channel_id);
       setOpen(false);
       return;
     }

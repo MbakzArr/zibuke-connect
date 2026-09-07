@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { channelsApi, type Channel, type Dm } from '../api/resources';
+import { channelsApi, departmentsApi, type Channel, type Dm, type Department } from '../api/resources';
 import { useNotifications } from '../context/NotificationsContext';
 import { useSocket } from '../context/SocketContext';
 import { usePresenceMap } from '../context/PresenceContext';
@@ -40,6 +40,8 @@ export default function Sidebar({
   const [dms, setDms] = useState<Dm[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newDepartmentId, setNewDepartmentId] = useState('');
+  const [departments, setDepartments] = useState<Department[]>([]);
   // Collapsed by default - it doesn't need to sit visible in the sidebar
   // all the time, just a click away.
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -97,8 +99,9 @@ export default function Sidebar({
   async function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    const { channel } = await channelsApi.create(name);
+    const { channel } = await channelsApi.create(name, false, newDepartmentId || null);
     setNewName('');
+    setNewDepartmentId('');
     setCreating(false);
     await loadChannels();
     onSelectChannel(channel);
@@ -129,7 +132,19 @@ export default function Sidebar({
       <div className="side-section">
         <div className="side-section-head">
           <span>Channels</span>
-          <button className="side-add" onClick={() => setCreating((c) => !c)} aria-label="Create channel">+</button>
+          <button
+            className="side-add"
+            onClick={() => {
+              setCreating((c) => {
+                const next = !c;
+                if (next && departments.length === 0) {
+                  departmentsApi.list().then((d) => setDepartments(d.departments)).catch(() => {});
+                }
+                return next;
+              });
+            }}
+            aria-label="Create channel"
+          >+</button>
         </div>
 
         {creating && (
@@ -141,6 +156,20 @@ export default function Sidebar({
               placeholder="channel-name"
               autoFocus
             />
+            {departments.length > 0 && (
+              <select
+                className="side-create-dept"
+                value={newDepartmentId}
+                onChange={(e) => setNewDepartmentId(e.target.value)}
+                aria-label="Department (optional)"
+              >
+                <option value="">No department</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            )}
+            <button className="side-create-go" onClick={handleCreate} disabled={!newName.trim()}>Create</button>
           </div>
         )}
 

@@ -12,6 +12,7 @@ import SearchModal from '../components/SearchModal';
 import NotificationBell from '../components/NotificationBell';
 import AnnouncementModal from '../components/AnnouncementModal';
 import NewAnnouncementModal from '../components/NewAnnouncementModal';
+import JoinRequestsModal from '../components/JoinRequestsModal';
 import AdminPanel from '../components/AdminPanel';
 import { useToast } from '../context/ToastContext';
 import ProfileModal from '../components/ProfileModal';
@@ -33,6 +34,7 @@ export default function Workspace() {
   const [dmUserId, setDmUserId] = useState<string | undefined>(undefined);
   const [jumpToId, setJumpToId] = useState<string | undefined>(undefined);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
+  const [joinRequestsChannel, setJoinRequestsChannel] = useState<{ id: string; name: string } | null>(null);
   const [openEventDetail, setOpenEventDetail] = useState<{ title: string; startsAt: string; venue: string | null } | null>(null);
   const [myName, setMyName] = useState<string>('');
   // On phone-width screens, start with the sidebar hidden so the main
@@ -292,6 +294,7 @@ export default function Workspace() {
             onNavigateToChannel={navigateToChannel}
             onOpenAnnouncement={openAnnouncementById}
             onOpenEvent={setOpenEventDetail}
+            onOpenJoinRequests={(id, name) => setJoinRequestsChannel({ id, name })}
           />
           <div className="ws-account-wrap">
             <button
@@ -506,6 +509,13 @@ export default function Workspace() {
         <AnnouncementModal
           announcement={openAnnouncement}
           onClose={() => setOpenAnnouncement(null)}
+        />
+      )}
+      {joinRequestsChannel && (
+        <JoinRequestsModal
+          channelId={joinRequestsChannel.id}
+          channelName={joinRequestsChannel.name}
+          onClose={() => setJoinRequestsChannel(null)}
         />
       )}
       {openEventDetail && (

@@ -6,7 +6,7 @@ import { emitToUser } from '../messaging/realtime';
 // they don't touch sockets themselves. If the user is connected, they get
 // it instantly; if not, it's waiting in their list when they next load.
 
-type NotificationType = 'mention' | 'announcement' | 'announcement_mention' | 'dm' | 'event' | 'department_head' | 'task_assigned' | 'reaction';
+type NotificationType = 'mention' | 'announcement' | 'announcement_mention' | 'dm' | 'event' | 'department_head' | 'task_assigned' | 'reaction' | 'channel_join_request' | 'channel_join_approved' | 'channel_join_rejected';
 
 interface CreateNotificationInput {
   userId: string;
@@ -106,6 +106,27 @@ async function hydrateOne(n: any) {
     );
     return { ...n, ...r.rows[0] };
   }
+  if (n.type === 'channel_join_request') {
+    // source_id is the request row's own id, so this can show who's
+    // asking AND which channel - mirrors the reaction type's approach
+    // above for the same reason (one row already has everything needed).
+    const r = await pool.query(
+      `SELECT c.name AS join_channel_name, c.id AS join_channel_id,
+              requester.full_name AS join_requester_name
+       FROM channel_join_requests jr
+       JOIN channels c ON c.id = jr.channel_id
+       LEFT JOIN employee_profiles requester ON requester.user_id = jr.user_id
+       WHERE jr.id = $1`,
+      [n.source_id]
+    );
+    return { ...n, ...r.rows[0] };
+  }
+  if (n.type === 'channel_join_approved' || n.type === 'channel_join_rejected') {
+    // source_id is the channel's id here (the request itself is resolved
+    // and no longer the useful thing to point at - see resolveJoinRequest).
+    const r = await pool.query(`SELECT name AS join_channel_name, id AS join_channel_id FROM channels WHERE id = $1`, [n.source_id]);
+    return { ...n, ...r.rows[0] };
+  }
   return n;
 }
 
@@ -162,7 +183,10 @@ export async function listNotifications(userId: string, unreadOnly = false) {
             rxn.target_type    AS reaction_target_type,
             reactor.full_name  AS reactor_name,
             rxn_msg.content    AS reaction_message_content,
-            rxn_ann.title      AS reaction_announcement_title
+            rxn_ann.title      AS reaction_announcement_title,
+            requester.full_name AS join_requester_name,
+            COALESCE(jc1.id, jc2.id)     AS join_channel_id,
+            COALESCE(jc1.name, jc2.name) AS join_channel_name
      FROM notifications n
      LEFT JOIN messages msg
        ON msg.id = n.source_id AND n.type IN ('mention', 'dm')
@@ -184,6 +208,14 @@ export async function listNotifications(userId: string, unreadOnly = false) {
        ON rxn_msg.id = rxn.target_id::uuid AND rxn.target_type = 'message'
      LEFT JOIN announcements rxn_ann
        ON rxn_ann.id = rxn.target_id::uuid AND rxn.target_type = 'announcement'
+     LEFT JOIN channel_join_requests jcr
+       ON jcr.id = n.source_id AND n.type = 'channel_join_request'
+     LEFT JOIN channels jc1
+       ON jc1.id = jcr.channel_id
+     LEFT JOIN employee_profiles requester
+       ON requester.user_id = jcr.user_id
+     LEFT JOIN channels jc2
+       ON jc2.id = n.source_id AND n.type IN ('channel_join_approved', 'channel_join_rejected')
      WHERE n.user_id = $1
        ${unreadOnly ? 'AND n.is_read = false' : ''}
      ORDER BY n.created_at DESC

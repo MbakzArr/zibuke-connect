@@ -184,6 +184,14 @@ export interface FullProfile {
   date_of_birth: string | null;
 }
 
+export const aiApi = {
+  summarizeChannel: (channelId: string) =>
+    apiRequest<{ summary: string | null; messageCount: number }>('/api/v1/ai/summarize-channel', {
+      method: 'POST',
+      body: { channelId },
+    }),
+};
+
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
   create: (name: string, isPrivate = false, departmentId?: string | null) =>

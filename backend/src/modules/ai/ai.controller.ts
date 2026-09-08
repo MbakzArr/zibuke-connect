@@ -4,7 +4,7 @@ import { summarizeChannel } from './ai.service';
 
 export async function summarize(req: Request, res: Response) {
   try {
-    const { channelId } = req.body;
+    const { channelId, since } = req.body;
     if (!channelId) {
       return res.status(400).json({ error: 'channelId is required' });
     }
@@ -17,7 +17,7 @@ export async function summarize(req: Request, res: Response) {
       return res.status(403).json({ error: 'You are not a member of this channel' });
     }
 
-    const { summary, messageCount } = await summarizeChannel(channelId, req.user!.userId);
+    const { summary, messageCount } = await summarizeChannel(channelId, since ?? null);
     return res.json({ summary, messageCount });
   } catch (err: any) {
     if (err.message === 'AI_REQUEST_FAILED') {

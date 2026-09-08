@@ -47,7 +47,20 @@ export async function listChannelsForUser(organizationId: string, userId: string
 
 // Mark a channel as read by this user right now. Called when they open it.
 // Returns the timestamp actually stored, so the caller can push it out live.
+// Marks a channel as read (updates last_read_at to now), but also hands
+// back what last_read_at was BEFORE this call - the summarize-channel
+// feature needs that previous value, captured at the moment the channel
+// was opened, not a fresh read of channel_reads after the fact (which
+// would just show this same visit's timestamp and always come back
+// empty - see ai.service.ts's comment on why "since" is passed in
+// explicitly instead of being re-derived here).
 export async function markChannelRead(userId: string, channelId: string) {
+  const previous = await pool.query(
+    'SELECT last_read_at FROM channel_reads WHERE user_id = $1 AND channel_id = $2',
+    [userId, channelId]
+  );
+  const previousReadAt = previous.rows[0]?.last_read_at ?? null;
+
   const result = await pool.query(
     `INSERT INTO channel_reads (user_id, channel_id, last_read_at)
      VALUES ($1, $2, now())
@@ -55,7 +68,7 @@ export async function markChannelRead(userId: string, channelId: string) {
      RETURNING last_read_at`,
     [userId, channelId]
   );
-  return result.rows[0].last_read_at;
+  return { lastReadAt: result.rows[0].last_read_at, previousReadAt };
 }
 
 // For a DM, when did the OTHER participant last read it - powers the

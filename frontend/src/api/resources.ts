@@ -185,10 +185,10 @@ export interface FullProfile {
 }
 
 export const aiApi = {
-  summarizeChannel: (channelId: string) =>
+  summarizeChannel: (channelId: string, since: string | null) =>
     apiRequest<{ summary: string | null; messageCount: number }>('/api/v1/ai/summarize-channel', {
       method: 'POST',
-      body: { channelId },
+      body: { channelId, since },
     }),
 };
 
@@ -227,7 +227,10 @@ export const channelsApi = {
   members: (channelId: string) =>
     apiRequest<{ members: ChannelMember[] }>(`/api/v1/channels/${channelId}/members`),
   markRead: (channelId: string) =>
-    apiRequest(`/api/v1/channels/${channelId}/read`, { method: 'PATCH' }),
+    apiRequest<{ read: boolean; lastReadAt: string; previousReadAt: string | null }>(
+      `/api/v1/channels/${channelId}/read`,
+      { method: 'PATCH' }
+    ),
   readStatus: (channelId: string) =>
     apiRequest<{ otherLastReadAt: string | null }>(`/api/v1/channels/${channelId}/read-status`),
   searchPlaces: (q: string) =>

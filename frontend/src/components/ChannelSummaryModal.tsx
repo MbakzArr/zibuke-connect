@@ -4,13 +4,17 @@ import { aiApi } from '../api/resources';
 interface ChannelSummaryModalProps {
   channelId: string;
   channelName: string;
+  // Captured by ChannelView the moment the channel was opened, before
+  // this visit's own mark-read update overwrote channel_reads - see the
+  // comment there for why this can't just be fetched fresh in here.
+  since: string | null;
   onClose: () => void;
 }
 
 // "Catch me up" - asks the backend to summarize everything in this channel
-// since the user last read it. The backend does the actual AI call (and
+// since a given point in time. The backend does the actual AI call (and
 // the membership check) - this just shows the result.
-export default function ChannelSummaryModal({ channelId, channelName, onClose }: ChannelSummaryModalProps) {
+export default function ChannelSummaryModal({ channelId, channelName, since, onClose }: ChannelSummaryModalProps) {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(0);
@@ -18,7 +22,7 @@ export default function ChannelSummaryModal({ channelId, channelName, onClose }:
 
   useEffect(() => {
     let cancelled = false;
-    aiApi.summarizeChannel(channelId)
+    aiApi.summarizeChannel(channelId, since)
       .then((d) => {
         if (cancelled) return;
         setSummary(d.summary);

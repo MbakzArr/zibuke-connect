@@ -47,19 +47,19 @@ async function callWorkersAI(messages: { role: string; content: string }[]): Pro
   return data.result.response.trim();
 }
 
-// "Catch me up" - summarizes everything in a channel since this user last
-// read it (falls back to the most recent messages if they've never opened
-// it before). Membership is checked by the controller before this is ever
-// called, the same requireAuth + isMember check that already gates
-// reading the channel's actual messages - the AI never sees anything the
-// person couldn't already read themselves.
-export async function summarizeChannel(channelId: string, userId: string) {
-  const lastRead = await pool.query(
-    'SELECT last_read_at FROM channel_reads WHERE channel_id = $1 AND user_id = $2',
-    [channelId, userId]
-  );
-  const since = lastRead.rows[0]?.last_read_at ?? null;
-
+// "Catch me up" - summarizes everything in a channel since a given point
+// in time. That point has to be captured by the CALLER at the moment the
+// channel was opened, before markChannelRead overwrites channel_reads for
+// this visit - re-deriving "since" from channel_reads here would almost
+// always find nothing, because opening the channel (which is what makes
+// the "catch me up" button visible in the first place) is the same action
+// that just marked everything up to now as read. If the caller has
+// nothing captured yet (their very first visit to this channel), this
+// falls back to just the most recent messages instead of the full
+// history. Membership is checked by the controller before this is ever
+// called - the AI never sees anything the person couldn't already read
+// themselves.
+export async function summarizeChannel(channelId: string, since: string | null) {
   const result = await pool.query(
     `SELECT p.full_name AS sender_name, m.content
      FROM messages m

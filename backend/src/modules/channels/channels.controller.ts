@@ -229,7 +229,7 @@ export async function searchPlaces(req: Request, res: Response) {
 
 export async function markRead(req: Request, res: Response) {
   try {
-    const lastReadAt = await markChannelRead(req.user!.userId, req.params.id);
+    const { lastReadAt, previousReadAt } = await markChannelRead(req.user!.userId, req.params.id);
     // Push it live so anyone else with this channel open (the other side of
     // a DM, checking whether their message was seen) updates without a
     // refresh - same pattern as message:new/message:updated.
@@ -238,7 +238,7 @@ export async function markRead(req: Request, res: Response) {
       userId: req.user!.userId,
       lastReadAt,
     });
-    return res.json({ read: true, lastReadAt });
+    return res.json({ read: true, lastReadAt, previousReadAt });
   } catch (err) {
     console.error('Mark channel read error:', err);
     return res.status(500).json({ error: 'Could not update read status' });

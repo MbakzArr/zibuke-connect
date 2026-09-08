@@ -13,12 +13,17 @@ const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const MAX_MESSAGES = 80;
 const MAX_SUMMARY_TOKENS = 400;
 
+// Same idea for the writing assistant - a rewrite should never come back
+// wildly longer than what was typed in.
+const MAX_REWRITE_INPUT_CHARS = 2000;
+const MAX_REWRITE_TOKENS = 400;
+
 interface ChannelMessageForSummary {
   sender_name: string | null;
   content: string;
 }
 
-async function callWorkersAI(messages: { role: string; content: string }[]): Promise<string> {
+async function callWorkersAI(messages: { role: string; content: string }[], maxTokens: number): Promise<string> {
   const accountId = process.env.R2_ACCOUNT_ID; // same Cloudflare account, no separate id needed
   const token = process.env.CF_AI_API_TOKEN;
   const res = await fetch(
@@ -29,7 +34,7 @@ async function callWorkersAI(messages: { role: string; content: string }[]): Pro
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ messages, max_tokens: MAX_SUMMARY_TOKENS }),
+      body: JSON.stringify({ messages, max_tokens: maxTokens }),
     }
   );
 
@@ -93,7 +98,47 @@ export async function summarizeChannel(channelId: string, since: string | null) 
         'You summarize workplace chat conversations. Be concise - use short bullet points covering key topics, decisions, and anything anyone was asked to do. No preamble, no sign-off, just the summary itself.',
     },
     { role: 'user', content: transcript },
-  ]);
+  ], MAX_SUMMARY_TOKENS);
 
   return { summary, messageCount: chronological.length };
+}
+
+const REWRITE_INSTRUCTIONS: Record<string, string> = {
+  clearer:
+    'Rewrite the following workplace chat message to be clearer and easier to understand. Keep the same meaning and roughly the same length. Reply with only the rewritten message, nothing else - no preamble, no quotes around it.',
+  shorter:
+    'Rewrite the following workplace chat message to be more concise, keeping the key meaning. Reply with only the rewritten message, nothing else - no preamble, no quotes around it.',
+  grammar:
+    'Fix the grammar and spelling in the following workplace chat message. Keep the tone, meaning, and length as close to the original as possible - make only the corrections needed. Reply with only the corrected message, nothing else - no preamble, no quotes around it.',
+  professional:
+    'Rewrite the following workplace chat message in a more professional tone, suitable for a workplace conversation. Keep the same meaning. Reply with only the rewritten message, nothing else - no preamble, no quotes around it.',
+};
+
+export type RewriteStyle = keyof typeof REWRITE_INSTRUCTIONS;
+
+// The writing assistant - rewrites a draft the user is about to send. Never
+// touches anything already sent or anyone else's messages; the text comes
+// straight from whatever's in the person's own composer, and the result
+// only ever replaces that same draft box, never sends anything itself.
+export async function rewriteText(text: string, style: string) {
+  const instruction = REWRITE_INSTRUCTIONS[style];
+  if (!instruction) {
+    throw new Error('INVALID_STYLE');
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error('EMPTY_TEXT');
+  }
+  if (trimmed.length > MAX_REWRITE_INPUT_CHARS) {
+    throw new Error('TOO_LONG');
+  }
+
+  const rewritten = await callWorkersAI(
+    [
+      { role: 'system', content: instruction },
+      { role: 'user', content: trimmed },
+    ],
+    MAX_REWRITE_TOKENS
+  );
+  return rewritten;
 }

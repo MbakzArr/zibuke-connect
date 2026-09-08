@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { channelsApi, messagesApi, reactionsApi, directoryApi, attachmentsApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
+import { channelsApi, messagesApi, reactionsApi, directoryApi, attachmentsApi, aiApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
 import { statusColor, statusLabel } from '../util/status';
 import { useLivePresence } from '../context/PresenceContext';
 import { useSocket } from '../context/SocketContext';
@@ -53,6 +53,8 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [msgReactions, setMsgReactions] = useState<ReactionsMap>({});
   const [draft, setDraft] = useState('');
   const [pendingAttachment, setPendingAttachment] = useState<{ file: File; key: string | null; uploading: boolean } | null>(null);
+  const [showRewriteMenu, setShowRewriteMenu] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [typingName, setTypingName] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -498,6 +500,24 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     }
   }
 
+  // Rewrites whatever's currently in the composer - never sends anything
+  // itself, just replaces the draft so the person can review it (and edit
+  // further) before hitting Send themselves.
+  async function rewriteDraft(style: 'clearer' | 'shorter' | 'grammar' | 'professional') {
+    const text = draft.trim();
+    if (!text) return;
+    setShowRewriteMenu(false);
+    setRewriting(true);
+    try {
+      const { text: rewritten } = await aiApi.rewrite(text, style);
+      setDraft(rewritten);
+    } catch (err: any) {
+      showToast(err?.message || 'Could not rewrite that message.', { type: 'error' });
+    } finally {
+      setRewriting(false);
+    }
+  }
+
   async function downloadAttachment(key: string, fileName: string) {
     try {
       const { downloadUrl } = await attachmentsApi.requestDownload(key);
@@ -922,6 +942,24 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
               title="Attach a file"
               aria-label="Attach a file"
             >📎</button>
+            <div className="chan-rewrite-wrap">
+              <button
+                type="button"
+                className="chan-rewrite-btn"
+                onClick={() => setShowRewriteMenu((v) => !v)}
+                disabled={!draft.trim() || rewriting}
+                title="Rewrite with AI"
+                aria-label="Rewrite with AI"
+              >{rewriting ? '…' : '✨'}</button>
+              {showRewriteMenu && (
+                <ul className="chan-rewrite-menu">
+                  <li><button type="button" onClick={() => rewriteDraft('clearer')}>Make it clearer</button></li>
+                  <li><button type="button" onClick={() => rewriteDraft('shorter')}>Make it shorter</button></li>
+                  <li><button type="button" onClick={() => rewriteDraft('grammar')}>Fix grammar</button></li>
+                  <li><button type="button" onClick={() => rewriteDraft('professional')}>More professional</button></li>
+                </ul>
+              )}
+            </div>
             <input
               ref={composerInputRef}
               value={draft}

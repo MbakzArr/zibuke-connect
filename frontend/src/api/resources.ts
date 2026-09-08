@@ -190,6 +190,11 @@ export const aiApi = {
       method: 'POST',
       body: { channelId, since },
     }),
+  rewrite: (text: string, style: 'clearer' | 'shorter' | 'grammar' | 'professional') =>
+    apiRequest<{ text: string }>('/api/v1/ai/rewrite', {
+      method: 'POST',
+      body: { text, style },
+    }),
 };
 
 export const channelsApi = {

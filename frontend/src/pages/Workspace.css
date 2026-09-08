@@ -220,6 +220,37 @@
   background: var(--indigo-600); color: #fff; font-weight: 600; font-size: 14px;
 }
 .chan-composer button:hover:not(:disabled) { background: var(--indigo-700); }
+.chan-composer button:disabled { opacity: 0.5; }
+.chan-attach-btn {
+  flex-shrink: 0; padding: 0 12px !important; background: var(--surface-2) !important;
+  color: var(--ink-soft); font-size: 16px; border: 1px solid var(--border) !important;
+}
+.chan-attach-btn:hover { background: var(--surface-3) !important; }
+
+.chan-pending-attachment {
+  display: flex; align-items: center; gap: 8px; max-width: 860px; margin: 0 auto var(--sp-2);
+  padding: 6px 10px; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 13px;
+}
+.chan-pending-icon { font-size: 14px; }
+.chan-pending-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan-pending-status { color: var(--ink-faint); font-size: 12px; }
+.chan-pending-remove {
+  background: none; border: none; color: var(--ink-faint); font-size: 16px; line-height: 1; padding: 0 2px;
+}
+.chan-pending-remove:hover { color: var(--danger); }
+
+.bubble-attachment {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-sm); width: 100%; max-width: 260px; text-align: left; cursor: pointer;
+}
+.bubble-theirs .bubble-attachment { background: var(--surface-2); border-color: var(--border); }
+.bubble-attachment:hover { filter: brightness(0.97); }
+.bubble-attachment-icon { font-size: 18px; flex-shrink: 0; }
+.bubble-attachment-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.bubble-attachment-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bubble-attachment-size { font-size: 11px; opacity: 0.75; }
+.bubble-attachment-dl { font-size: 13px; opacity: 0.75; flex-shrink: 0; }
 
 /* ---- @mention autocomplete dropdown ---- */
 .chan-mention-dropdown {

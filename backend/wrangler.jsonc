@@ -33,11 +33,16 @@
   ],
 
   // Non-secret configuration. FRONTEND_ORIGIN is safe here (it's a public
-  // URL, not a credential). JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and
+  // URL, not a credential). R2_ACCOUNT_ID and R2_BUCKET_NAME are also
+  // safe (an account id and a bucket name aren't credentials on their
+  // own - nothing can be accessed with just these). JWT_ACCESS_SECRET,
+  // JWT_REFRESH_SECRET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and
   // anything else sensitive are set separately via `wrangler secret put`
-  // (see Part 3) - deliberately never written into this file, so nothing
-  // sensitive ends up in git history.
+  // - deliberately never written into this file, so nothing sensitive
+  // ends up in git history.
   "vars": {
-    "FRONTEND_ORIGIN": "https://zibuke-connect.netlify.app,https://zibuke-connect-frontend.zibuke-connect-frontend.workers.dev"
+    "FRONTEND_ORIGIN": "https://zibuke-connect.netlify.app,https://zibuke-connect-frontend.zibuke-connect-frontend.workers.dev",
+    "R2_ACCOUNT_ID": "ce23549c62c6083debf7d2cc0ba035dc",
+    "R2_BUCKET_NAME": "zibuke-connect-attachments"
   }
 }

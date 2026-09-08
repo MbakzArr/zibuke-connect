@@ -25,6 +25,10 @@ export interface Message {
   edited_at: string | null;
   deleted_at: string | null;
   sender_name: string | null;
+  attachment_key?: string | null;
+  attachment_name?: string | null;
+  attachment_type?: string | null;
+  attachment_size?: number | null;
 }
 
 export interface Announcement {
@@ -241,11 +245,34 @@ export interface RecentConversation {
   other_name: string | null;
 }
 
+// Two-step upload: ask the server for a signed URL, then PUT the file
+// bytes straight to R2 from the browser (never through our own API) - the
+// server only ever sees the file's name, type, and size, not its content.
+export const attachmentsApi = {
+  requestUpload: (fileName: string, fileType: string, fileSize: number) =>
+    apiRequest<{ uploadUrl: string; key: string }>('/api/v1/attachments/upload-url', {
+      method: 'POST',
+      body: { fileName, fileType, fileSize },
+    }),
+  requestDownload: (key: string) =>
+    apiRequest<{ downloadUrl: string }>(`/api/v1/attachments/download-url?key=${encodeURIComponent(key)}`),
+  // Not through apiRequest - this goes straight to R2 with the signed URL,
+  // not to our own API, and R2 expects the raw file body, not JSON.
+  uploadToR2: async (uploadUrl: string, file: File) => {
+    const res = await fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type },
+    });
+    if (!res.ok) throw new Error('Upload failed - please try again.');
+  },
+};
+
 export const messagesApi = {
-  send: (channelId: string, content: string) =>
+  send: (channelId: string, content: string, attachment?: { key: string; name: string; type: string; size: number } | null) =>
     apiRequest<{ message: Message }>('/api/v1/messages', {
       method: 'POST',
-      body: { channelId, content },
+      body: { channelId, content, attachment },
     }),
   edit: (id: string, content: string) =>
     apiRequest<{ message: Message }>(`/api/v1/messages/${id}`, {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { channelsApi, messagesApi, reactionsApi, directoryApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
+import { channelsApi, messagesApi, reactionsApi, directoryApi, attachmentsApi, type Channel, type Message, type MessageSearchResult, type ReactionsMap } from '../api/resources';
 import { statusColor, statusLabel } from '../util/status';
 import { useLivePresence } from '../context/PresenceContext';
 import { useSocket } from '../context/SocketContext';
@@ -10,6 +10,25 @@ import MembersModal from './MembersModal';
 import JoinRequestsModal from './JoinRequestsModal';
 import ProfileModal from './ProfileModal';
 import Reactions from './Reactions';
+
+// Both pure and stateless, so they live outside the component rather than
+// being recreated every render.
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function attachmentIcon(type: string | null | undefined): string {
+  if (!type) return '📄';
+  if (type.startsWith('image/')) return '🖼️';
+  if (type === 'application/pdf') return '📕';
+  if (type.includes('word')) return '📝';
+  if (type.includes('sheet') || type.includes('excel')) return '📊';
+  if (type.includes('presentation') || type.includes('powerpoint')) return '📽️';
+  return '📄';
+}
 
 interface ChannelViewProps {
   channel: Channel;
@@ -32,6 +51,8 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [messages, setMessages] = useState<Message[]>([]);
   const [msgReactions, setMsgReactions] = useState<ReactionsMap>({});
   const [draft, setDraft] = useState('');
+  const [pendingAttachment, setPendingAttachment] = useState<{ file: File; key: string | null; uploading: boolean } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [typingName, setTypingName] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -443,9 +464,50 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     }
   }
 
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so picking the same file twice still fires onChange
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      showToast('That file is too large - the limit is 15MB.', { type: 'error' });
+      return;
+    }
+    setPendingAttachment({ file, key: null, uploading: true });
+    try {
+      const { uploadUrl, key } = await attachmentsApi.requestUpload(file.name, file.type || 'application/octet-stream', file.size);
+      await attachmentsApi.uploadToR2(uploadUrl, file);
+      setPendingAttachment({ file, key, uploading: false });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not upload that file.', { type: 'error' });
+      setPendingAttachment(null);
+    }
+  }
+
+  async function downloadAttachment(key: string, fileName: string) {
+    try {
+      const { downloadUrl } = await attachmentsApi.requestDownload(key);
+      // A fresh link each click, not a cached/permanent one - matches how
+      // the signed URL was designed to expire on the backend.
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = fileName;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err: any) {
+      showToast(err?.message || 'Could not download that file.', { type: 'error' });
+    }
+  }
+
   function send() {
     const content = draft.trim();
-    if (!content) return;
+    if (!content && !pendingAttachment) return;
+    if (pendingAttachment?.uploading) {
+      showToast('Still uploading that file - one moment.', { type: 'info' });
+      return;
+    }
     if (!isMember) {
       showToast(`Join #${channel.name} to send messages.`, { type: 'error' });
       return;
@@ -459,9 +521,13 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     // dedup-by-id check in the message:new handler above stops it from
     // appearing twice when both this and the live broadcast arrive.
     const sentContent = content;
+    const attachment = pendingAttachment?.key
+      ? { key: pendingAttachment.key, name: pendingAttachment.file.name, type: pendingAttachment.file.type || 'application/octet-stream', size: pendingAttachment.file.size }
+      : null;
     setDraft('');
+    setPendingAttachment(null);
     socket?.emit('typing:stop', channel.id);
-    messagesApi.send(channel.id, sentContent)
+    messagesApi.send(channel.id, sentContent, attachment)
       .then(({ message }) => {
         setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
         // Move this DM to the top of the sidebar - it used to only ever
@@ -727,6 +793,20 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
                   <div className="bubble-line">
                     <div className={`bubble ${mine ? 'bubble-mine' : 'bubble-theirs'} ${m.deleted_at ? 'is-deleted' : ''}`}>
                       {m.content}
+                      {m.attachment_key && !m.deleted_at && (
+                        <button
+                          type="button"
+                          className="bubble-attachment"
+                          onClick={() => downloadAttachment(m.attachment_key!, m.attachment_name || 'file')}
+                        >
+                          <span className="bubble-attachment-icon">{attachmentIcon(m.attachment_type)}</span>
+                          <span className="bubble-attachment-info">
+                            <span className="bubble-attachment-name">{m.attachment_name}</span>
+                            <span className="bubble-attachment-size">{formatFileSize(m.attachment_size)}</span>
+                          </span>
+                          <span className="bubble-attachment-dl">⬇</span>
+                        </button>
+                      )}
                     </div>
                     {/* Edit/delete only on your own, non-deleted messages */}
                     {mine && !m.deleted_at && (
@@ -797,7 +877,31 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
               ))}
             </ul>
           )}
+          {pendingAttachment && (
+            <div className="chan-pending-attachment">
+              <span className="chan-pending-icon">📎</span>
+              <span className="chan-pending-name">{pendingAttachment.file.name}</span>
+              {pendingAttachment.uploading ? (
+                <span className="chan-pending-status">Uploading...</span>
+              ) : (
+                <button
+                  type="button"
+                  className="chan-pending-remove"
+                  onClick={() => setPendingAttachment(null)}
+                  aria-label="Remove attachment"
+                >×</button>
+              )}
+            </div>
+          )}
           <div className="chan-composer-inner">
+            <input type="file" ref={fileInputRef} onChange={handleFileSelected} style={{ display: 'none' }} />
+            <button
+              type="button"
+              className="chan-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach a file"
+              aria-label="Attach a file"
+            >📎</button>
             <input
               ref={composerInputRef}
               value={draft}
@@ -805,7 +909,7 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
               onKeyDown={handleComposerKeyDown}
               placeholder={dmTitle ? `Message ${dmTitle}` : `Message ${channel.is_private ? '' : '#'}${channel.name}`}
             />
-            <button onClick={send} disabled={!draft.trim()}>Send</button>
+            <button onClick={send} disabled={!draft.trim() && !pendingAttachment}>Send</button>
           </div>
         </div>
       ) : (

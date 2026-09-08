@@ -15,6 +15,7 @@ import eventsRoutes from './modules/events/events.routes';
 import usersRoutes from './modules/users/users.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import tasksRoutes from './modules/tasks/tasks.routes';
+import attachmentsRoutes from './modules/attachments/attachments.routes';
 import { openApiSpec } from './docs/openapi';
 import { requireAuth } from './middleware/requireAuth';
 import { RealtimeRoom } from './durable/RealtimeRoom';
@@ -137,6 +138,7 @@ app.use('/api/v1/events', eventsRoutes);
 app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/tasks', tasksRoutes);
+app.use('/api/v1/attachments', attachmentsRoutes);
 
 app.get('/api/v1/me', requireAuth, (req, res) => {
   res.json({ user: req.user });

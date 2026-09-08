@@ -227,6 +227,25 @@
 }
 .chan-attach-btn:hover { background: var(--surface-3) !important; }
 
+.chan-rewrite-wrap { position: relative; flex-shrink: 0; }
+.chan-rewrite-btn {
+  padding: 0 12px !important; background: linear-gradient(135deg, var(--indigo-50, #eef2ff), var(--surface-2)) !important;
+  color: var(--indigo-600); font-size: 15px; border: 1px solid var(--indigo-200, var(--border)) !important;
+}
+.chan-rewrite-btn:hover:not(:disabled) { filter: brightness(0.97); }
+.chan-rewrite-btn:disabled { opacity: 0.4; }
+.chan-rewrite-menu {
+  position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 20;
+  list-style: none; margin: 0; padding: 6px; min-width: 170px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(26, 26, 46, 0.14);
+}
+.chan-rewrite-menu button {
+  width: 100%; text-align: left; padding: 7px 10px; border: none; background: transparent;
+  border-radius: 8px; font-size: 13px; color: var(--ink);
+}
+.chan-rewrite-menu button:hover { background: var(--indigo-50, var(--surface-2)); }
+
 .chan-pending-attachment {
   display: flex; align-items: center; gap: 8px; max-width: 860px; margin: 0 auto var(--sp-2);
   padding: 6px 10px; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 13px;

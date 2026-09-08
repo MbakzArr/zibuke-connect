@@ -59,6 +59,10 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  // Captured once, right when the channel is opened - see the comment on
+  // markRead below for why this can't just be re-read from the server
+  // later, at click time.
+  const catchUpSinceRef = useRef<string | null>(null);
   const [showJoinRequests, setShowJoinRequests] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
   // Only the channel's creator, or an admin, can see/manage its join
@@ -164,7 +168,16 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     load();
     // Mark it read on the server (updates channel_reads, which is also
     // what the "Seen" tick on the OTHER person's screen reads from).
-    channelsApi.markRead(channel.id).catch(() => {
+    // Also capture what last_read_at was BEFORE this update - "Catch me
+    // up" needs that previous value, not a fresh read of channel_reads
+    // later, since opening the channel (right now) is the same action
+    // that reveals the Catch-me-up button in the first place. Without
+    // capturing it here, clicking that button would almost always find
+    // "nothing new", because the read timestamp it'd compare against
+    // would already be this very visit.
+    channelsApi.markRead(channel.id).then((d) => {
+      catchUpSinceRef.current = d.previousReadAt;
+    }).catch(() => {
       // best-effort; a failed mark-read just leaves the badge showing
     });
     return () => {
@@ -955,6 +968,7 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
         <ChannelSummaryModal
           channelId={channel.id}
           channelName={channel.name}
+          since={catchUpSinceRef.current}
           onClose={() => setShowSummary(false)}
         />
       )}

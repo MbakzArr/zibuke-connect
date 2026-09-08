@@ -17,6 +17,13 @@ export function getR2Client() {
       accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
       secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
     },
+    // Newer AWS SDK versions auto-attach a checksum requirement
+    // (x-amz-sdk-checksum-algorithm) to presigned PUT URLs by default. A
+    // plain browser fetch() upload, which is what actually performs the
+    // upload here, never computes or sends that checksum, so R2 rejects
+    // the mismatch with a 400 - this turns that default back off, since
+    // nothing here needs SDK-side checksum verification.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
   });
 }
 

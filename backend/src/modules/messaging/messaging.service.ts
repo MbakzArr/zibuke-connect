@@ -9,16 +9,23 @@ interface CreateMessageInput {
   channelId: string;
   userId: string;
   content: string;
+  attachment?: {
+    key: string;
+    name: string;
+    type: string;
+    size: number;
+  } | null;
 }
 
 export async function createMessage(input: CreateMessageInput) {
-  const { channelId, userId, content } = input;
+  const { channelId, userId, content, attachment } = input;
 
   const result = await pool.query(
-    `INSERT INTO messages (channel_id, user_id, content)
-     VALUES ($1, $2, $3)
-     RETURNING id, channel_id, user_id, content, created_at, edited_at, deleted_at`,
-    [channelId, userId, content]
+    `INSERT INTO messages (channel_id, user_id, content, attachment_key, attachment_name, attachment_type, attachment_size)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, channel_id, user_id, content, created_at, edited_at, deleted_at,
+               attachment_key, attachment_name, attachment_type, attachment_size`,
+    [channelId, userId, content, attachment?.key ?? null, attachment?.name ?? null, attachment?.type ?? null, attachment?.size ?? null]
   );
 
   // Return the message joined with the sender's display name, so the client
@@ -50,6 +57,7 @@ export async function getMessages(channelId: string, limit = 30, before?: string
   const result = await pool.query(
     `SELECT m.id, m.channel_id, m.user_id, m.content,
             m.created_at, m.edited_at, m.deleted_at,
+            m.attachment_key, m.attachment_name, m.attachment_type, m.attachment_size,
             p.full_name AS sender_name
      FROM messages m
      LEFT JOIN employee_profiles p ON p.user_id = m.user_id

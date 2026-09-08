@@ -20,8 +20,11 @@ import { runInBackground } from '../../util/background';
 
 export async function create(req: Request, res: Response) {
   try {
-    const { channelId, content } = req.body;
-    if (!content || String(content).trim().length === 0) {
+    const { channelId, content, attachment } = req.body;
+    const trimmedContent = content ? String(content).trim() : '';
+    // A message needs either text or an attachment, not necessarily both -
+    // sending just a file with no caption is normal.
+    if (!trimmedContent && !attachment) {
       return res.status(400).json({ error: 'Message cannot be empty' });
     }
     if (!channelId) {
@@ -36,7 +39,10 @@ export async function create(req: Request, res: Response) {
     const message = await createMessage({
       channelId,
       userId: req.user!.userId,
-      content: String(content).trim(),
+      content: trimmedContent,
+      attachment: attachment
+        ? { key: attachment.key, name: attachment.name, type: attachment.type, size: attachment.size }
+        : null,
     });
 
     // Same broadcasts the socket handler does - safe no-ops without a

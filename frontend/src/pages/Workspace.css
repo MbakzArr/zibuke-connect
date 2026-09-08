@@ -488,6 +488,14 @@
   padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--border);
 }
 .modal-head h3 { margin: 0; font-size: 16px; }
+
+/* ---- AI channel summary ---- */
+.ai-summary-modal { max-width: 520px; }
+.ai-summary-body { padding: var(--sp-5); }
+.ai-summary-loading, .ai-summary-empty { color: var(--ink-faint); font-size: 14px; text-align: center; padding: var(--sp-4) 0; }
+.ai-summary-error { color: var(--danger); font-size: 14px; text-align: center; padding: var(--sp-4) 0; }
+.ai-summary-meta { font-size: 12px; color: var(--ink-faint); margin: 0 0 var(--sp-3); }
+.ai-summary-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .modal-close {
   border: none; background: transparent; font-size: 22px; line-height: 1;
   color: var(--ink-faint); width: 28px; height: 28px; border-radius: 6px;
@@ -811,6 +819,11 @@
   border-radius: 16px; font-size: 13px; color: var(--ink-soft);
 }
 .chan-members-btn:hover { background: var(--surface-3); }
+.chan-summary-btn {
+  padding: 6px 12px; border: 1px solid var(--indigo-200, var(--border)); background: linear-gradient(135deg, var(--indigo-50, #eef2ff), var(--surface-2));
+  border-radius: 16px; font-size: 13px; color: var(--indigo-600); font-weight: 600;
+}
+.chan-summary-btn:hover { filter: brightness(0.97); }
 .chan-requests-btn {
   padding: 6px 12px; border: 1px solid var(--indigo-200, var(--border)); background: var(--indigo-50, var(--surface-2));
   border-radius: 16px; font-size: 13px; color: var(--indigo-600); display: inline-flex; align-items: center; gap: 5px;

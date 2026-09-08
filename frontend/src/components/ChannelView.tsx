@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import MembersModal from './MembersModal';
 import JoinRequestsModal from './JoinRequestsModal';
+import ChannelSummaryModal from './ChannelSummaryModal';
 import ProfileModal from './ProfileModal';
 import Reactions from './Reactions';
 
@@ -57,6 +58,7 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [showJoinRequests, setShowJoinRequests] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
   // Only the channel's creator, or an admin, can see/manage its join
@@ -666,6 +668,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
         )}
         <div className="chan-head-actions">
           {!dmTitle && (
+            <button className="chan-summary-btn" onClick={() => setShowSummary(true)} title="Catch me up on this channel">
+              ✨ Catch me up
+            </button>
+          )}
+          {!dmTitle && (
             <button className="chan-members-btn" onClick={() => setShowMembers(true)} title="View members">
               👥 Members
             </button>
@@ -941,6 +948,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           channelName={channel.name}
           onClose={() => setShowJoinRequests(false)}
           onResolved={() => setPendingRequestCount((n) => Math.max(0, n - 1))}
+        />
+      )}
+
+      {showSummary && (
+        <ChannelSummaryModal
+          channelId={channel.id}
+          channelName={channel.name}
+          onClose={() => setShowSummary(false)}
         />
       )}
 

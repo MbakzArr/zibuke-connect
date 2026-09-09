@@ -200,6 +200,8 @@ export const aiApi = {
       '/api/v1/ai/extract-task',
       { method: 'POST', body: { messageId } }
     ),
+  ask: (question: string) =>
+    apiRequest<{ answer: string }>('/api/v1/ai/ask', { method: 'POST', body: { question } }),
 };
 
 export const channelsApi = {

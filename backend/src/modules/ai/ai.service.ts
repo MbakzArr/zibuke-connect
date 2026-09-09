@@ -49,7 +49,14 @@ async function callWorkersAI(messages: { role: string; content: string }[], maxT
     console.error('Workers AI unsuccessful response:', JSON.stringify(data));
     throw new Error('AI_REQUEST_FAILED');
   }
-  return data.result.response.trim();
+  // Normally a plain string, but when the prompt explicitly asks for JSON
+  // output (extractTask below), Workers AI has been observed handing back
+  // an already-parsed object here instead of a raw string - .trim() would
+  // crash on that. Stringify it in that case, and let the caller's own
+  // parsing (extractTask already expects to pull JSON out of messy text)
+  // handle either shape the same way.
+  const response = data.result.response;
+  return typeof response === 'string' ? response.trim() : JSON.stringify(response);
 }
 
 // "Catch me up" - summarizes everything in a channel since a given point

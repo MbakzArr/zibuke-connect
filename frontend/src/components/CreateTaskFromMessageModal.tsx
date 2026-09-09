@@ -17,6 +17,7 @@ interface CreateTaskFromMessageModalProps {
 export default function CreateTaskFromMessageModal({ message, channelMembers, onClose }: CreateTaskFromMessageModalProps) {
   const [loading, setLoading] = useState(true);
   const [hasTask, setHasTask] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -38,7 +39,10 @@ export default function CreateTaskFromMessageModal({ message, channelMembers, on
         }
       })
       .catch((err: any) => {
-        if (!cancelled) showToast(err?.message || 'Could not check this message for a task.', { type: 'error' });
+        if (cancelled) return;
+        const message = err?.message || 'Could not check this message for a task.';
+        setError(message);
+        showToast(message, { type: 'error' });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -72,10 +76,11 @@ export default function CreateTaskFromMessageModal({ message, channelMembers, on
         </div>
         <div className="ai-task-body">
           {loading && <p className="ai-summary-loading">Reading the message...</p>}
-          {!loading && !hasTask && (
+          {!loading && error && <p className="ai-summary-error">{error}</p>}
+          {!loading && !error && !hasTask && (
             <p className="ai-summary-empty">Couldn't find a clear task in this message.</p>
           )}
-          {!loading && hasTask && (
+          {!loading && !error && hasTask && (
             <>
               <label className="ai-task-field">
                 Task

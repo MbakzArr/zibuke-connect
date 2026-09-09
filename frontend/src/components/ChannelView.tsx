@@ -9,6 +9,7 @@ import { colorFor } from '../util/avatarColor';
 import MembersModal from './MembersModal';
 import JoinRequestsModal from './JoinRequestsModal';
 import ChannelSummaryModal from './ChannelSummaryModal';
+import CreateTaskFromMessageModal from './CreateTaskFromMessageModal';
 import ProfileModal from './ProfileModal';
 import Reactions from './Reactions';
 
@@ -61,6 +62,7 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const [editDraft, setEditDraft] = useState('');
   const [showMembers, setShowMembers] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [extractingFrom, setExtractingFrom] = useState<Message | null>(null);
   // Captured once, right when the channel is opened - see the comment on
   // markRead below for why this can't just be re-read from the server
   // later, at click time.
@@ -848,11 +850,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
                         </button>
                       )}
                     </div>
-                    {/* Edit/delete only on your own, non-deleted messages */}
-                    {mine && !m.deleted_at && (
+                    {/* Edit/delete only on your own; extracting a task
+                        works on anyone's message, since the point is
+                        catching tasks OTHER people asked you to do. */}
+                    {!m.deleted_at && (
                       <div className="msg-actions">
-                        <button className="msg-action" onClick={() => startEdit(m)} title="Edit">✏️</button>
-                        <button className="msg-action" onClick={() => remove(m.id)} title="Delete">🗑️</button>
+                        {mine && <button className="msg-action" onClick={() => startEdit(m)} title="Edit">✏️</button>}
+                        {mine && <button className="msg-action" onClick={() => remove(m.id)} title="Delete">🗑️</button>}
+                        <button className="msg-action" onClick={() => setExtractingFrom(m)} title="Create task from this message">📋</button>
                       </div>
                     )}
                   </div>
@@ -1008,6 +1013,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           channelName={channel.name}
           since={catchUpSinceRef.current}
           onClose={() => setShowSummary(false)}
+        />
+      )}
+
+      {extractingFrom && (
+        <CreateTaskFromMessageModal
+          message={extractingFrom}
+          channelMembers={channelMembers}
+          onClose={() => setExtractingFrom(null)}
         />
       )}
 

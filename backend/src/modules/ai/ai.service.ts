@@ -142,3 +142,68 @@ export async function rewriteText(text: string, style: string) {
   );
   return rewritten;
 }
+
+const MAX_EXTRACT_INPUT_CHARS = 2000;
+const MAX_EXTRACT_TOKENS = 200;
+
+export interface ExtractedTask {
+  hasTask: boolean;
+  title: string | null;
+  assigneeName: string | null;
+  dueDate: string | null; // YYYY-MM-DD, or null if no date was mentioned
+}
+
+// Looks at one message and asks whether it contains an actionable task -
+// "Thabo, please finish the API docs by Friday" - and if so, pulls out a
+// short title, who it sounds like it's for, and a due date. This is only
+// ever a SUGGESTION: nothing gets created here. The caller shows it to the
+// person as a "Create task?" confirmation they can edit or reject -
+// assigneeName especially is just the AI's best guess at a name from the
+// text, not a real user id, so the frontend has to resolve it against
+// actual channel members before anything can actually be created.
+export async function extractTask(text: string): Promise<ExtractedTask> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error('EMPTY_TEXT');
+  }
+  if (trimmed.length > MAX_EXTRACT_INPUT_CHARS) {
+    throw new Error('TOO_LONG');
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const raw = await callWorkersAI(
+    [
+      {
+        role: 'system',
+        content:
+          `Today's date is ${today}. Decide whether the following workplace chat message contains a clear, actionable task assigned to someone (something specific someone was asked to do). ` +
+          `Reply with ONLY a JSON object, no other text, in exactly this shape: ` +
+          `{"hasTask": boolean, "title": string or null, "assigneeName": string or null, "dueDate": "YYYY-MM-DD" or null}. ` +
+          `"title" should be a short task description (a few words), not the whole message. "assigneeName" is the first name of whoever the task is for, if the message names them or clearly addresses them directly - otherwise null. ` +
+          `"dueDate" should be an actual calendar date worked out from today's date if the message mentions one (e.g. "by Friday", "tomorrow") - otherwise null. ` +
+          `If the message is just chat with no real task in it, reply {"hasTask": false, "title": null, "assigneeName": null, "dueDate": null}.`,
+      },
+      { role: 'user', content: trimmed },
+    ],
+    MAX_EXTRACT_TOKENS
+  );
+
+  try {
+    // Models occasionally wrap JSON in a code fence or add a stray word
+    // before/after it despite being told not to - pull out just the {...}
+    // rather than trusting the whole response to be valid JSON on its own.
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : raw);
+    return {
+      hasTask: Boolean(parsed.hasTask),
+      title: typeof parsed.title === 'string' ? parsed.title : null,
+      assigneeName: typeof parsed.assigneeName === 'string' ? parsed.assigneeName : null,
+      dueDate: typeof parsed.dueDate === 'string' ? parsed.dueDate : null,
+    };
+  } catch (err) {
+    console.error('Extract task: could not parse model output:', raw);
+    // Not a hard failure - just means "no task found", same as the model
+    // genuinely saying so. A malformed response isn't the person's problem.
+    return { hasTask: false, title: null, assigneeName: null, dueDate: null };
+  }
+}

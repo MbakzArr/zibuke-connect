@@ -195,6 +195,11 @@ export const aiApi = {
       method: 'POST',
       body: { text, style },
     }),
+  extractTask: (messageId: string) =>
+    apiRequest<{ hasTask: boolean; title: string | null; assigneeName: string | null; dueDate: string | null }>(
+      '/api/v1/ai/extract-task',
+      { method: 'POST', body: { messageId } }
+    ),
 };
 
 export const channelsApi = {

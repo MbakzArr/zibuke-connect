@@ -221,21 +221,22 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     };
   }, [socket, channel.id, user?.id]);
 
-  // Check actual membership for a group channel. DMs skip this - if you
-  // can open one at all, you're in it. A public channel, though, shows up
-  // in the sidebar for everyone whether joined or not, so this is what
-  // decides between showing the composer or a join prompt.
+  // Check actual membership for a group channel. DMs skip the *membership
+  // check* - if you can open one at all, you're in it - but still need
+  // the member list itself fetched either way: the assignee dropdown on
+  // "create task from this message" and @mention autocomplete both read
+  // from channelMembers, and a DM's two participants are exactly who you'd
+  // want to assign a task to or mention. Skipping the whole fetch for DMs
+  // (as this used to) left that dropdown empty and blocked task creation
+  // entirely in a DM - a real regression once that feature started
+  // depending on this list too, not just an unused optimization.
   useEffect(() => {
-    if (dmTitle) {
-      setIsMember(true);
-      return;
-    }
+    if (dmTitle) setIsMember(true);
     let cancelled = false;
     channelsApi.members(channel.id).then((d) => {
-      if (!cancelled) {
-        setIsMember(d.members.some((m) => m.id === user?.id));
-        setChannelMembers(d.members);
-      }
+      if (cancelled) return;
+      setChannelMembers(d.members);
+      if (!dmTitle) setIsMember(d.members.some((m) => m.id === user?.id));
     }).catch(() => {
       // best-effort; if this fails, leave isMember at its current value
       // rather than wrongly locking someone out of a channel they're in

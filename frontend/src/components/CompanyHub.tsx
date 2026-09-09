@@ -27,6 +27,7 @@ import ProfileModal from './ProfileModal';
 import EventListItem from './EventListItem';
 import AnnouncementScopePicker from './AnnouncementScopePicker';
 import TasksWidget from './TasksWidget';
+import AskAIModal from './AskAIModal';
 import { usePresenceMap } from '../context/PresenceContext';
 
 interface CompanyHubProps {
@@ -86,6 +87,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
   const peopleRef = useRef<HTMLDivElement>(null);
   const [announcementsExpanded, setAnnouncementsExpanded] = useState(false);
   const [peopleExpanded, setPeopleExpanded] = useState(false);
+  const [showAskAI, setShowAskAI] = useState(false);
   const [channelsExpanded, setChannelsExpanded] = useState(false);
   const [recentExpanded, setRecentExpanded] = useState(false);
   const [directoryOpen, setDirectoryOpen] = useState(false);
@@ -215,9 +217,12 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           <p className="hub-tagline">Here's what's happening across Zibuke today.</p>
           <p className="hub-date">{todayLabel}</p>
         </div>
-        <div className="hub-status-pill">
-          <span className="hub-status-dot" style={{ background: statusColor('online', myAvailability) }} />
-          {statusLabel('online', myAvailability)}
+        <div className="hub-hero-actions">
+          <button className="hub-ask-ai-btn" onClick={() => setShowAskAI(true)}>✨ Ask Zibuke AI</button>
+          <div className="hub-status-pill">
+            <span className="hub-status-dot" style={{ background: statusColor('online', myAvailability) }} />
+            {statusLabel('online', myAvailability)}
+          </div>
         </div>
       </div>
 
@@ -528,6 +533,8 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           onClose={() => setOpenAnn(null)}
         />
       )}
+
+      {showAskAI && <AskAIModal onClose={() => setShowAskAI(false)} />}
     </section>
   );
 }

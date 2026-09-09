@@ -1,4 +1,6 @@
 import { pool } from '../../db/pool';
+import { listAnnouncements } from '../announcements/announcements.service';
+import { listMyTasks } from '../tasks/tasks.service';
 
 // A small, fast instruction-tuned model - plenty for summarizing a chat
 // channel, and cheap enough on the free "neurons" budget to actually use
@@ -213,4 +215,90 @@ export async function extractTask(text: string): Promise<ExtractedTask> {
     // genuinely saying so. A malformed response isn't the person's problem.
     return { hasTask: false, title: null, assigneeName: null, dueDate: null };
   }
+}
+
+const MAX_ASK_INPUT_CHARS = 500;
+const MAX_ASK_TOKENS = 350;
+const MAX_CONTEXT_ANNOUNCEMENTS = 15;
+const MAX_CONTEXT_TASKS = 15;
+const MAX_CONTEXT_EVENTS = 10;
+const MAX_ANNOUNCEMENT_PREVIEW_CHARS = 300;
+
+// Same idea as announcements.controller.ts's own getViewerScope, kept as
+// its own small copy here rather than importing a controller function
+// into a service - undefined means "admin, see everything",
+// null means "not in a department, org-wide only".
+async function getViewerDepartment(userId: string, isAdmin: boolean): Promise<string | null | undefined> {
+  if (isAdmin) return undefined;
+  const result = await pool.query('SELECT department_id FROM users WHERE id = $1', [userId]);
+  return result.rows[0]?.department_id ?? null;
+}
+
+// Knowledge Q&A - "what's the latest HR announcement", "what tasks are
+// assigned to me", "when's the next team meeting". Deliberately answers
+// from announcements, tasks, and events only, not live channel messages -
+// searching message history safely (respecting exactly who's a member of
+// which channel) is a meaningfully bigger problem on its own, and
+// "Catch me up" already covers "what happened in this channel" separately.
+//
+// The security principle that matters here: every piece of context comes
+// from a call that ALREADY enforces who's allowed to see it -
+// listAnnouncements is the exact same department-scoped query the
+// announcements feed itself uses, listMyTasks only ever returns this
+// user's own tasks. The AI is never handed anything through a new,
+// separate permission path - it only ever sees a bounded slice of what
+// the asker could already see themselves.
+export async function askQuestion(organizationId: string, userId: string, isAdmin: boolean, question: string): Promise<string> {
+  const trimmed = question.trim();
+  if (!trimmed) {
+    throw new Error('EMPTY_TEXT');
+  }
+  if (trimmed.length > MAX_ASK_INPUT_CHARS) {
+    throw new Error('TOO_LONG');
+  }
+
+  const viewerDept = await getViewerDepartment(userId, isAdmin);
+  const [announcements, myTasks, eventsResult] = await Promise.all([
+    listAnnouncements(organizationId, viewerDept),
+    listMyTasks(organizationId, userId),
+    pool.query(
+      `SELECT title, starts_at FROM events WHERE organization_id = $1 AND starts_at >= now() ORDER BY starts_at ASC LIMIT ${MAX_CONTEXT_EVENTS}`,
+      [organizationId]
+    ),
+  ]);
+
+  const announcementLines = announcements.slice(0, MAX_CONTEXT_ANNOUNCEMENTS).map((a: any) => {
+    const preview = (a.content || '').slice(0, MAX_ANNOUNCEMENT_PREVIEW_CHARS);
+    const scope = a.department_name ? ` (${a.department_name})` : ' (org-wide)';
+    return `- [${a.created_at.toString().slice(0, 10)}]${scope} "${a.title}" by ${a.author_name || 'someone'}: ${preview}`;
+  });
+
+  const taskLines = myTasks.slice(0, MAX_CONTEXT_TASKS).map((t: any) =>
+    `- "${t.title}" - due ${t.due_date || 'no due date'} - status: ${t.status}${t.assigner_name ? ` - assigned by ${t.assigner_name}` : ''}`
+  );
+
+  const eventLines = eventsResult.rows.map((e: any) =>
+    `- "${e.title}" - ${new Date(e.starts_at).toISOString().slice(0, 16).replace('T', ' ')}`
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+  const context =
+    `Today's date is ${today}.\n\n` +
+    `COMPANY ANNOUNCEMENTS this person can see (most recent first):\n${announcementLines.join('\n') || '(none)'}\n\n` +
+    `THIS PERSON'S OWN TASKS:\n${taskLines.join('\n') || '(none)'}\n\n` +
+    `UPCOMING EVENTS:\n${eventLines.join('\n') || '(none)'}`;
+
+  const answer = await callWorkersAI(
+    [
+      {
+        role: 'system',
+        content:
+          'You answer workplace questions using ONLY the information provided below. If the answer isn\'t in it, say plainly that you don\'t have that information - never guess or invent an answer. Be concise, a sentence or two.\n\n' +
+          context,
+      },
+      { role: 'user', content: trimmed },
+    ],
+    MAX_ASK_TOKENS
+  );
+  return answer;
 }

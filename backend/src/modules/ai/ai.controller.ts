@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { isMember } from '../channels/channels.service';
 import { getMessageById } from '../messaging/messaging.service';
-import { summarizeChannel, rewriteText, extractTask } from './ai.service';
+import { summarizeChannel, rewriteText, extractTask, askQuestion } from './ai.service';
 
 export async function summarize(req: Request, res: Response) {
   try {
@@ -89,5 +89,37 @@ export async function extract(req: Request, res: Response) {
     }
     console.error('Extract task error:', err);
     return res.status(500).json({ error: 'Could not check this message for a task' });
+  }
+}
+
+// No membership check needed - askQuestion itself only ever pulls
+// context the requester is already entitled to see (their own tasks,
+// announcements scoped to their department), so there's nothing extra to
+// authorize here beyond being signed in.
+export async function ask(req: Request, res: Response) {
+  try {
+    const { question } = req.body;
+    if (typeof question !== 'string') {
+      return res.status(400).json({ error: 'question is required' });
+    }
+    const answer = await askQuestion(
+      req.user!.organizationId,
+      req.user!.userId,
+      req.user!.role === 'admin',
+      question
+    );
+    return res.json({ answer });
+  } catch (err: any) {
+    if (err.message === 'EMPTY_TEXT') {
+      return res.status(400).json({ error: 'Ask something first' });
+    }
+    if (err.message === 'TOO_LONG') {
+      return res.status(400).json({ error: 'That question is a bit long - try asking it more directly' });
+    }
+    if (err.message === 'AI_REQUEST_FAILED') {
+      return res.status(502).json({ error: 'Could not reach the AI service - try again in a moment.' });
+    }
+    console.error('Ask question error:', err);
+    return res.status(500).json({ error: 'Could not answer that right now' });
   }
 }

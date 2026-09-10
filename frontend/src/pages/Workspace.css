@@ -783,7 +783,7 @@
 .browse-pending { background: none; color: var(--ink-faint); cursor: default; }
 
 /* ---- Search modal ---- */
-.modal-wide { max-width: 560px; }
+.modal-wide { max-width: 720px; }
 .search-results { max-height: 420px; overflow-y: auto; padding: var(--sp-2); }
 .search-group { margin-bottom: var(--sp-3); }
 .search-group-head {
@@ -1422,12 +1422,13 @@
 }
 .admin-user-list { list-style: none; margin: 0; padding: 0; max-height: 55vh; overflow-y: auto; }
 .admin-user-row {
-  display: flex; align-items: center; gap: var(--sp-3);
-  padding: 10px 4px; border-bottom: 1px solid var(--surface-3);
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding: 12px 4px; border-bottom: 1px solid var(--surface-3);
 }
 .admin-user-row:last-child { border-bottom: none; }
 .admin-user-row.is-removed { opacity: 0.55; }
-.admin-user-info { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
+.admin-user-info { display: flex; flex-direction: column; flex: 1 1 160px; min-width: 140px; gap: 1px; }
+.admin-user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-user-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; }
 .admin-user-removed-tag {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;

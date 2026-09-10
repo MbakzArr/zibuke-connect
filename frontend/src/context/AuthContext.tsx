@@ -8,6 +8,7 @@ interface User {
   id: string;
   email: string;
   role: string;
+  userType: string;
 }
 
 interface AuthContextValue {
@@ -34,7 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const data = await apiRequest('/api/v1/me');
         // /me returns the decoded token; map it to our user shape.
-        setUser({ id: data.user.userId, email: '', role: data.user.role });
+        setUser({ id: data.user.userId, email: '', role: data.user.role, userType: data.user.userType });
       } catch {
         setTokens(null, null);
       } finally {

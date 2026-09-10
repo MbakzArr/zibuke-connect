@@ -258,18 +258,27 @@ async function addMember(channelId: string, userId: string) {
 // unless their account has been removed, in which case it falls back to
 // every admin in the org - a request should never be permanently stuck
 // just because the person who made the channel is gone.
+// Who gets notified and can approve a join request: the channel's
+// creator, PLUS every admin - admins act as a permanent backdoor for
+// every channel, not just a fallback for when a creator's account no
+// longer exists, so there's always someone who can approve a request
+// even if the creator is on leave, unresponsive, or has moved on.
 async function getJoinApprovers(organizationId: string, channelId: string, createdBy: string): Promise<string[]> {
+  const approvers = new Set<string>();
+
   const creator = await pool.query(
     'SELECT id FROM users WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
     [createdBy, organizationId]
   );
-  if (creator.rows.length > 0) return [createdBy];
+  if (creator.rows.length > 0) approvers.add(createdBy);
 
   const admins = await pool.query(
     `SELECT id FROM users WHERE organization_id = $1 AND role = 'admin' AND deleted_at IS NULL`,
     [organizationId]
   );
-  return admins.rows.map((r) => r.id);
+  for (const row of admins.rows) approvers.add(row.id);
+
+  return Array.from(approvers);
 }
 
 // The new front door for joining a public channel - creates a pending
@@ -568,7 +577,19 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
 export async function searchChannelsAndDms(organizationId: string, userId: string, query: string) {
   const like = `%${query}%`;
 
-  // Channels: public ones, plus private ones the user is a member of, name match.
+  // Same visibility rule as listBrowsableChannels - this search was a
+  // completely separate query that predated department/candidate
+  // scoping and was never updated to match, so it was showing
+  // department-restricted channels (and letting candidates find regular
+  // channels) regardless of who was searching. Being a member always
+  // overrides the visibility rule, same reasoning as everywhere else:
+  // you shouldn't lose access to something you're already in.
+  const scope = await getChannelViewerScope(userId);
+  const visibility = channelVisibilityExpr(scope, 4);
+  const channelParams = visibility.param ? [organizationId, userId, like, visibility.param] : [organizationId, userId, like];
+
+  // Channels: public ones within visibility scope, plus private ones the
+  // user is a member of, name match.
   const channels = await pool.query(
     `SELECT DISTINCT c.id, c.name, c.is_private, c.is_dm,
             EXISTS (SELECT 1 FROM channel_members cm WHERE cm.channel_id = c.id AND cm.user_id = $2) AS is_member
@@ -576,11 +597,13 @@ export async function searchChannelsAndDms(organizationId: string, userId: strin
      LEFT JOIN channel_members me ON me.channel_id = c.id AND me.user_id = $2
      WHERE c.organization_id = $1
        AND c.is_dm = false
+       AND c.deleted_at IS NULL
        AND c.name ILIKE $3
        AND (c.is_private = false OR me.user_id IS NOT NULL)
+       AND (me.user_id IS NOT NULL OR ${visibility.sql})
      ORDER BY c.name ASC
      LIMIT 10`,
-    [organizationId, userId, like]
+    channelParams
   );
 
   // DMs: match on the other participant's name.

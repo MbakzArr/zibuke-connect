@@ -3,6 +3,7 @@ import { channelsApi, departmentsApi, type Channel, type Dm, type Department } f
 import { useNotifications } from '../context/NotificationsContext';
 import { useSocket } from '../context/SocketContext';
 import { usePresenceMap } from '../context/PresenceContext';
+import { useAuth } from '../context/AuthContext';
 import MiniCalendar from './MiniCalendar';
 
 interface SidebarProps {
@@ -36,6 +37,7 @@ export default function Sidebar({
   showAnnouncementAction,
   onDeleteDm,
 }: SidebarProps) {
+  const { user } = useAuth();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [dms, setDms] = useState<Dm[]>([]);
   const [creating, setCreating] = useState(false);
@@ -140,6 +142,7 @@ export default function Sidebar({
       <div className="side-section">
         <div className="side-section-head">
           <span>Channels</span>
+          {user?.userType !== 'candidate' && (
           <button
             className="side-add"
             onClick={() => {
@@ -153,6 +156,7 @@ export default function Sidebar({
             }}
             aria-label="Create channel"
           >+</button>
+          )}
         </div>
 
         {creating && (

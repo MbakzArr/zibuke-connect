@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pool } from '../../db/pool';
 import {
   createTask,
   listMyTasks,
@@ -19,6 +20,19 @@ export async function create(req: Request, res: Response) {
     if (!assignedTo) {
       return res.status(400).json({ error: 'assignedTo is required' });
     }
+
+    // Assigning TO a candidate is restricted - admins always can, and an
+    // admin can additionally grant this to specific employees
+    // individually (can_assign_candidate_tasks), without making them a
+    // department_admin or full admin just for this one purpose.
+    const assignee = await pool.query('SELECT user_type FROM users WHERE id = $1', [assignedTo]);
+    if (assignee.rows[0]?.user_type === 'candidate' && req.user!.role !== 'admin') {
+      const requester = await pool.query('SELECT can_assign_candidate_tasks FROM users WHERE id = $1', [req.user!.userId]);
+      if (!requester.rows[0]?.can_assign_candidate_tasks) {
+        return res.status(403).json({ error: "You don't have permission to assign tasks to candidates. Ask an admin to grant it." });
+      }
+    }
+
     const task = await createTask({
       organizationId: req.user!.organizationId,
       title: String(title).trim(),

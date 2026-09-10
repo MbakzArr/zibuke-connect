@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { listAllUsers, createEmployee, removeEmployee, restoreEmployee, changeRole, changeDepartment, resetEmployeePassword } from './admin.service';
+import { listAllUsers, createEmployee, removeEmployee, restoreEmployee, changeRole, changeDepartment, resetEmployeePassword, setCandidateTaskPermission } from './admin.service';
 
 export async function list(req: Request, res: Response) {
   try {
@@ -95,6 +95,20 @@ export async function setRole(req: Request, res: Response) {
     }
     console.error('Admin set role error:', err);
     return res.status(500).json({ error: 'Could not update role' });
+  }
+}
+
+export async function setCandidateTaskPerm(req: Request, res: Response) {
+  try {
+    const { allowed } = req.body;
+    const updated = await setCandidateTaskPermission(req.user!.organizationId, req.params.id, Boolean(allowed));
+    return res.json({ user: updated });
+  } catch (err: any) {
+    if (err.message === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    console.error('Admin set candidate-task permission error:', err);
+    return res.status(500).json({ error: 'Could not update permission' });
   }
 }
 

@@ -43,8 +43,8 @@ export async function createMessage(input: CreateMessageInput) {
 // The client passes the created_at of the oldest message it already has as
 // `before`, and gets the next older page. This scales far better than
 // OFFSET on a large messages table, which is what a 300k-user system needs.
-export async function getMessages(channelId: string, limit = 30, before?: string) {
-  const params: any[] = [channelId];
+export async function getMessages(channelId: string, userId: string, limit = 30, before?: string) {
+  const params: any[] = [channelId, userId];
   let beforeClause = '';
 
   if (before) {
@@ -61,7 +61,9 @@ export async function getMessages(channelId: string, limit = 30, before?: string
             p.full_name AS sender_name
      FROM messages m
      LEFT JOIN employee_profiles p ON p.user_id = m.user_id
+     LEFT JOIN channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
      WHERE m.channel_id = $1
+       AND (cm.cleared_at IS NULL OR m.created_at > cm.cleared_at)
        ${beforeClause}
      ORDER BY m.created_at DESC
      LIMIT $${params.length}`,

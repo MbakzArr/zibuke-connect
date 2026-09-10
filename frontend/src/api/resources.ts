@@ -234,6 +234,14 @@ export const channelsApi = {
   // message this person again later, a fresh DM channel is started.
   leave: (id: string) =>
     apiRequest(`/api/v1/channels/${id}/leave`, { method: 'POST' }),
+  // Personal only - clears this channel from just your own sidebar and
+  // hides its history for you, without leaving. Different from delete,
+  // which removes the channel for everyone and only the creator or an
+  // admin can do.
+  clear: (id: string) =>
+    apiRequest<{ cleared: boolean }>(`/api/v1/channels/${id}/clear`, { method: 'POST' }),
+  delete: (id: string) =>
+    apiRequest<{ deleted: boolean }>(`/api/v1/channels/${id}`, { method: 'DELETE' }),
   listDms: () => apiRequest<{ dms: Dm[] }>('/api/v1/channels/dm'),
   browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
   members: (channelId: string) =>
@@ -354,6 +362,7 @@ export interface AdminUser {
   department_id: string | null;
   department_name: string | null;
   user_type: string;
+  can_assign_candidate_tasks: boolean;
 }
 
 export interface Department {
@@ -415,6 +424,11 @@ export const adminApi = {
     apiRequest<{ user: { id: string; role: string } }>(`/api/v1/admin/users/${userId}/role`, {
       method: 'PATCH',
       body: { role },
+    }),
+  setCandidateTaskPermission: (userId: string, allowed: boolean) =>
+    apiRequest<{ user: { id: string; can_assign_candidate_tasks: boolean } }>(`/api/v1/admin/users/${userId}/candidate-task-permission`, {
+      method: 'PATCH',
+      body: { allowed },
     }),
   setDepartment: (userId: string, departmentId: string | null) =>
     apiRequest<{ user: { id: string; department_id: string | null } }>(`/api/v1/admin/users/${userId}/department`, {

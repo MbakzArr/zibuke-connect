@@ -126,6 +126,20 @@ function EmployeesTab() {
     }
   }
 
+  async function handleCandidateTaskPermChange(u: AdminUser, allowed: boolean) {
+    setBusyId(u.id);
+    try {
+      await adminApi.setCandidateTaskPermission(u.id, allowed);
+      await load();
+      showToast(allowed ? `${u.full_name || u.email} can now assign tasks to candidates.` : `Removed candidate-task permission from ${u.full_name || u.email}.`, { type: 'success' });
+    } catch (err: any) {
+      showToast(err?.message || 'Could not update that permission.', { type: 'error' });
+      await load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleDepartmentChange(u: AdminUser, departmentId: string) {
     setBusyId(u.id);
     try {
@@ -216,6 +230,17 @@ function EmployeesTab() {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
+                  {u.role === 'employee' && u.user_type !== 'candidate' && (
+                    <label className="admin-candidate-perm" title="Lets this person assign tasks to candidates, without making them an admin">
+                      <input
+                        type="checkbox"
+                        checked={u.can_assign_candidate_tasks}
+                        disabled={busyId === u.id}
+                        onChange={(e) => handleCandidateTaskPermChange(u, e.target.checked)}
+                      />
+                      Can assign candidate tasks
+                    </label>
+                  )}
                 </>
               )}
               {u.deleted_at ? (

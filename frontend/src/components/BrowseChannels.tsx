@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { channelsApi, type BrowsableChannel, type Channel } from '../api/resources';
 import { useToast } from '../context/ToastContext';
+import JoinRequestsModal from './JoinRequestsModal';
 
 interface BrowseChannelsProps {
   onClose: () => void;
@@ -16,6 +17,13 @@ export default function BrowseChannels({ onClose, onOpened }: BrowseChannelsProp
   const [channels, setChannels] = useState<BrowsableChannel[]>([]);
   const [query, setQuery] = useState('');
   const [requesting, setRequesting] = useState<string | null>(null);
+  // Which channel's join-requests modal is open, if any - this is what
+  // actually lets an admin manage requests for a channel they haven't
+  // joined (or even can't join, if private): the permission was always
+  // correctly backend-enforced, but there was no UI path to reach it
+  // without first becoming a member. Browse Channels is the one place
+  // this can happen without needing to open the channel itself.
+  const [managingChannel, setManagingChannel] = useState<BrowsableChannel | null>(null);
   const { showToast } = useToast();
 
   async function load() {
@@ -91,6 +99,15 @@ export default function BrowseChannels({ onClose, onOpened }: BrowseChannelsProp
                   </span>
                   <span className="browse-count">{c.member_count} members</span>
                 </div>
+                {c.can_manage_requests && Number(c.pending_request_count) > 0 && (
+                  <button
+                    className="browse-requests"
+                    onClick={() => setManagingChannel(c)}
+                    title="Manage pending join requests"
+                  >
+                    🔔 {c.pending_request_count}
+                  </button>
+                )}
                 {c.is_member ? (
                   <button className="browse-open" onClick={() => openChannel(c)}>Open</button>
                 ) : c.has_pending_request ? (
@@ -106,6 +123,23 @@ export default function BrowseChannels({ onClose, onOpened }: BrowseChannelsProp
           {filtered.length === 0 && <li className="modal-empty">No channels found.</li>}
         </ul>
       </div>
+
+      {managingChannel && (
+        <JoinRequestsModal
+          channelId={managingChannel.id}
+          channelName={managingChannel.name}
+          onClose={() => setManagingChannel(null)}
+          onResolved={() =>
+            setChannels((prev) =>
+              prev.map((x) =>
+                x.id === managingChannel.id
+                  ? { ...x, pending_request_count: String(Math.max(0, Number(x.pending_request_count) - 1)) }
+                  : x
+              )
+            )
+          }
+        />
+      )}
     </div>
   );
 }

@@ -16,6 +16,8 @@ import {
   markChannelRead,
   clearChannelForUser,
   deleteChannelForEveryone,
+  canManageChannel,
+  addMemberDirectly,
   getDmOtherReadAt,
   searchChannelsAndDms,
 } from './channels.service';
@@ -109,9 +111,8 @@ export async function join(req: Request, res: Response) {
 // or any admin (covers both the "creator's account was removed" fallback
 // and just gives admins visibility generally - matches how admins can
 // already see everything else in the org).
-async function canManageRequests(req: Request, channel: { created_by: string }): Promise<boolean> {
-  if (req.user!.role === 'admin') return true;
-  return channel.created_by === req.user!.userId;
+async function canManageRequests(req: Request, channel: { id: string; created_by: string }): Promise<boolean> {
+  return canManageChannel(channel.id, channel.created_by, req.user!.userId, req.user!.role === 'admin');
 }
 
 export async function listJoinRequests(req: Request, res: Response) {
@@ -168,6 +169,40 @@ export async function leave(req: Request, res: Response) {
   } catch (err) {
     console.error('Leave channel error:', err);
     return res.status(500).json({ error: 'Could not leave channel' });
+  }
+}
+
+// Add someone directly, no self-request needed - the creator (while
+// still a member) or an admin only. This is the only way anyone gets
+// into a private channel after it's created (there's no self-request
+// path for those at all), and it's how a candidate actually ends up in
+// a channel in practice - they can only ever discover and request to
+// join something already marked visible to them, so someone with
+// authority over the channel adding them directly is the real front
+// door, not a workaround.
+export async function addMember(req: Request, res: Response) {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+    const result = await addMemberDirectly(
+      req.user!.organizationId,
+      req.params.id,
+      userId,
+      req.user!.userId,
+      req.user!.role === 'admin'
+    );
+    if (!result.ok) {
+      if (result.reason === 'NOT_FOUND') return res.status(404).json({ error: 'Channel not found' });
+      if (result.reason === 'USER_NOT_FOUND') return res.status(404).json({ error: 'That person was not found' });
+      if (result.reason === 'ALREADY_MEMBER') return res.status(409).json({ error: 'Already a member of this channel' });
+      return res.status(403).json({ error: 'Only this channel\u2019s creator or an admin can add members' });
+    }
+    return res.json({ added: true });
+  } catch (err) {
+    console.error('Add member error:', err);
+    return res.status(500).json({ error: 'Could not add that person' });
   }
 }
 

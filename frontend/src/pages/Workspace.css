@@ -781,6 +781,23 @@
 .browse-join:disabled { opacity: 0.6; }
 .browse-open { background: var(--surface-3); color: var(--ink-soft); }
 .browse-pending { background: none; color: var(--ink-faint); cursor: default; }
+.browse-requests {
+  padding: 4px 10px; border: 1px solid var(--indigo-200, var(--border)); background: var(--indigo-50, var(--surface-2));
+  border-radius: 14px; font-size: 12.5px; font-weight: 600; color: var(--indigo-600); margin-right: 6px;
+}
+.browse-requests:hover { background: var(--surface-3); }
+
+/* ---- Add member modal ---- */
+.add-member-body { padding: var(--sp-4) var(--sp-5); }
+.add-member-search {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 14px; margin-bottom: var(--sp-3);
+}
+.add-member-btn {
+  padding: 5px 14px; border: none; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600;
+  background: var(--indigo-600); color: #fff; flex-shrink: 0;
+}
+.add-member-btn:disabled { opacity: 0.6; }
 
 /* ---- Search modal ---- */
 .modal-wide { max-width: 720px; }
@@ -917,6 +934,11 @@
   border-radius: 16px; font-size: 13px; color: var(--indigo-600); display: inline-flex; align-items: center; gap: 5px;
 }
 .chan-requests-btn:hover { background: var(--surface-3); }
+.chan-add-member-btn {
+  padding: 6px 12px; border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 16px; font-size: 13px; color: var(--ink-soft);
+}
+.chan-add-member-btn:hover { background: var(--surface-3); }
 .chan-requests-badge {
   background: var(--indigo-600); color: #fff; border-radius: 10px; padding: 1px 6px; font-size: 11px; font-weight: 700;
 }

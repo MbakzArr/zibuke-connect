@@ -331,6 +331,8 @@ export const announcementsApi = {
       method: 'POST',
       body: { title, content, departmentId, visibleToCandidates },
     }),
+  delete: (id: string) =>
+    apiRequest<{ deleted: boolean }>(`/api/v1/announcements/${id}`, { method: 'DELETE' }),
 };
 
 export const directoryApi = {

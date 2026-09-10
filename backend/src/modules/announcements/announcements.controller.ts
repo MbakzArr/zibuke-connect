@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { pool } from '../../db/pool';
-import { listAnnouncements, createAnnouncement, getAnnouncement } from './announcements.service';
+import { listAnnouncements, createAnnouncement, getAnnouncement, deleteAnnouncement } from './announcements.service';
 import { emitToUser } from '../messaging/realtime';
 import { processAnnouncementMentions } from '../messaging/mentions.service';
 import { runInBackground } from '../../util/background';
@@ -123,5 +123,29 @@ export async function getOne(req: Request, res: Response) {
   } catch (err) {
     console.error('Get announcement error:', err);
     return res.status(500).json({ error: 'Could not load announcement' });
+  }
+}
+
+// Real deletion - affects everyone. Only the original poster or an
+// admin can do this, checked server-side (deleteAnnouncement re-verifies
+// this itself, not just trusted from the client).
+export async function remove(req: Request, res: Response) {
+  try {
+    const result = await deleteAnnouncement(
+      req.user!.organizationId,
+      req.params.id,
+      req.user!.userId,
+      req.user!.role === 'admin'
+    );
+    if (!result.ok) {
+      if (result.reason === 'NOT_FOUND') {
+        return res.status(404).json({ error: 'Announcement not found' });
+      }
+      return res.status(403).json({ error: 'Only the person who posted this or an admin can delete it' });
+    }
+    return res.json({ deleted: true });
+  } catch (err) {
+    console.error('Delete announcement error:', err);
+    return res.status(500).json({ error: 'Could not delete announcement' });
   }
 }

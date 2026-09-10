@@ -42,6 +42,7 @@ export async function listAnnouncements(organizationId: string, departmentId: st
      LEFT JOIN departments d ON d.id = a.department_id
      LEFT JOIN employee_profiles p ON p.user_id = a.created_by
      WHERE a.organization_id = $1
+       AND a.deleted_at IS NULL
        ${deptClause}
      ORDER BY a.created_at DESC
      LIMIT 50`,
@@ -143,8 +144,33 @@ export async function getAnnouncement(organizationId: string, announcementId: st
      LEFT JOIN departments d ON d.id = a.department_id
      LEFT JOIN employee_profiles p ON p.user_id = a.created_by
      WHERE a.organization_id = $1 AND a.id = $2
+       AND a.deleted_at IS NULL
        ${deptClause}`,
     params
   );
   return result.rows[0] || null;
+}
+
+// Real deletion - affects everyone, not just the caller. Restricted to
+// the original poster or an admin, same rule already used for channels.
+// Soft delete: the row stays for audit, same philosophy as messages and
+// channels already work.
+export async function deleteAnnouncement(
+  organizationId: string,
+  announcementId: string,
+  requesterId: string,
+  requesterIsAdmin: boolean
+): Promise<{ ok: true } | { ok: false; reason: 'NOT_FOUND' | 'FORBIDDEN' }> {
+  const ann = await pool.query(
+    'SELECT created_by FROM announcements WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
+    [announcementId, organizationId]
+  );
+  if (ann.rows.length === 0) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+  if (!requesterIsAdmin && ann.rows[0].created_by !== requesterId) {
+    return { ok: false, reason: 'FORBIDDEN' };
+  }
+  await pool.query('UPDATE announcements SET deleted_at = now() WHERE id = $1', [announcementId]);
+  return { ok: true };
 }

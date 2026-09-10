@@ -87,12 +87,19 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
   // visible_to_candidates is set - they're added as an explicit extra
   // group here instead, matching how listAnnouncements treats the flag
   // as its own independent visibility rule, not a department membership.
+  // Candidates are users too, so a plain "everyone in the org" or
+  // "everyone in this department" query would include them even when
+  // visible_to_candidates is false - excluded here explicitly, then added
+  // back below only when that flag is actually set. Missing this the
+  // first time round was exactly the kind of "live push doesn't match
+  // the properly-filtered REST endpoint" bug already fixed once before
+  // for department scoping - same mistake, new dimension.
   const audience = departmentId
     ? await pool.query(
-        `SELECT id FROM users WHERE organization_id = $1 AND department_id = $2`,
+        `SELECT id FROM users WHERE organization_id = $1 AND department_id = $2 AND user_type <> 'candidate'`,
         [organizationId, departmentId]
       )
-    : await pool.query(`SELECT id FROM users WHERE organization_id = $1`, [organizationId]);
+    : await pool.query(`SELECT id FROM users WHERE organization_id = $1 AND user_type <> 'candidate'`, [organizationId]);
 
   const audienceUserIds = audience.rows.map((r) => r.id);
   if (visibleToCandidates) {

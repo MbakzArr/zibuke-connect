@@ -42,6 +42,7 @@ export default function Sidebar({
   const [newName, setNewName] = useState('');
   const [newDepartmentId, setNewDepartmentId] = useState('');
   const [newVisibleToCandidates, setNewVisibleToCandidates] = useState(false);
+  const [submittingChannel, setSubmittingChannel] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   // Collapsed by default - it doesn't need to sit visible in the sidebar
   // all the time, just a click away.
@@ -99,14 +100,19 @@ export default function Sidebar({
 
   async function handleCreate() {
     const name = newName.trim();
-    if (!name) return;
-    const { channel } = await channelsApi.create(name, false, newDepartmentId || null, newVisibleToCandidates);
-    setNewName('');
-    setNewDepartmentId('');
-    setNewVisibleToCandidates(false);
-    setCreating(false);
-    await loadChannels();
-    onSelectChannel(channel);
+    if (!name || submittingChannel) return;
+    setSubmittingChannel(true);
+    try {
+      const { channel } = await channelsApi.create(name, false, newDepartmentId || null, newVisibleToCandidates);
+      setNewName('');
+      setNewDepartmentId('');
+      setNewVisibleToCandidates(false);
+      setCreating(false);
+      await loadChannels();
+      onSelectChannel(channel);
+    } finally {
+      setSubmittingChannel(false);
+    }
   }
 
   return (
@@ -181,7 +187,9 @@ export default function Sidebar({
                 Also visible to candidates
               </label>
             )}
-            <button className="side-create-go" onClick={handleCreate} disabled={!newName.trim()}>Create</button>
+            <button className="side-create-go" onClick={handleCreate} disabled={!newName.trim() || submittingChannel}>
+              {submittingChannel ? 'Creating...' : 'Create'}
+            </button>
           </div>
         )}
 

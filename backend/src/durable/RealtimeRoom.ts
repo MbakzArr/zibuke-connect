@@ -35,6 +35,23 @@ interface SocketAttachment {
 }
 
 export class RealtimeRoom extends DurableObject {
+  constructor(ctx: DurableObjectState, env: unknown) {
+    super(ctx, env as any);
+    // The actual root cause of flaky presence/live-updates: Cloudflare's
+    // edge enforces a 100-second idle timeout on WebSocket connections
+    // (Free/Pro plans - not adjustable), and this app never sent any
+    // traffic during a quiet channel, so the connection would silently
+    // die and reconnect every ~100s, showing as a presence flicker each
+    // time. setWebSocketAutoResponse tells the RUNTIME ITSELF to answer
+    // a "ping" with "pong" directly - the DO is never woken to handle
+    // it (so this costs nothing and doesn't interrupt hibernation), but
+    // it's still real traffic on the connection, which is what actually
+    // resets Cloudflare's idle timer. Set in the constructor (not just
+    // once elsewhere) because the constructor re-runs every time the DO
+    // wakes from hibernation, and this needs to be armed again each time.
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 

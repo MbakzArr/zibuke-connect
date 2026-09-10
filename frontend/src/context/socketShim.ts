@@ -29,6 +29,7 @@ export class SocketShim {
   private closedByUser = false;
   private reconnectDelayMs = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private instanceId = Math.random().toString(36).slice(2, 8);
 
   constructor(token: string) {
@@ -48,11 +49,27 @@ export class SocketShim {
       this.reconnectDelayMs = 1000; // reset backoff on a successful connect
       console.log(`[SocketShim] ${this.instanceId} OPEN after ${Date.now() - connectStartedAt}ms`);
       this.dispatch('connect', []);
+      // Root cause of the flaky presence bug: Cloudflare's edge silently
+      // drops an idle WebSocket after 100 seconds on Free/Pro plans, and
+      // this connection previously never sent anything during a quiet
+      // channel. A plain "ping" every 25s (comfortably under the limit)
+      // is all it takes - the server answers it without ever waking the
+      // Durable Object (see RealtimeRoom's constructor), so this is
+      // essentially free, it just needs to happen at all.
+      this.heartbeatTimer = setInterval(() => {
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          this.ws.send('ping');
+        }
+      }, 25000);
     };
 
     ws.onclose = (ev) => {
       this.connected = false;
       console.log(`[SocketShim] ${this.instanceId} CLOSE code=${ev.code} reason="${ev.reason}" wasClean=${ev.wasClean} aliveFor=${Date.now() - connectStartedAt}ms`);
+      if (this.heartbeatTimer) {
+        clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+      }
       this.dispatch('disconnect', []);
       if (!this.closedByUser) this.scheduleReconnect();
     };
@@ -128,6 +145,10 @@ export class SocketShim {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
     this.ws?.close();
   }

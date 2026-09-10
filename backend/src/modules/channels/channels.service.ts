@@ -306,6 +306,19 @@ export async function addMemberDirectly(
     return { ok: false, reason: 'ALREADY_MEMBER' };
   }
   await addMember(channelId, userId);
+
+  // The person being added deserves to know, same as anyone whose join
+  // request gets approved - this was the actual gap being reported: the
+  // channel would just silently appear (or not, since the sidebar isn't
+  // live-pushed on membership changes either) with nothing telling them
+  // why or that it happened at all.
+  runInBackground(
+    (async () => {
+      await createNotification({ userId, type: 'channel_added', sourceId: channelId });
+      emitToUser(userId, 'channel:added', { channelId });
+    })()
+  );
+
   return { ok: true };
 }
 

@@ -91,31 +91,29 @@ export class RealtimeRoom extends DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
-    // Hibernatable accept - NOT server.accept(). This is what tells the
-    // runtime it's safe to evict this DO from memory between messages on
-    // this socket and still wake it back up correctly later.
+    // IMPORTANT: acceptWebSocket FIRST, then check existing sockets,
+    // and exclude THIS socket when checking. The DO's WebSocket list
+    // only includes sockets after acceptWebSocket() is called - but once
+    // it IS called, this new socket is immediately in the list. So we
+    // check getWebSockets() AFTER accept and exclude `server` itself.
+    // Previously the code called getWebSockets() BEFORE acceptWebSocket,
+    // meaning this new socket wasn't in the list yet but dead stale
+    // sockets from the previous connection cycle WERE - causing
+    // alreadyOnline=true incorrectly and willMarkOnline=false every time.
     this.ctx.acceptWebSocket(server);
     const attachment: SocketAttachment = { userId, organizationId, joinedChannels: [] };
     server.serializeAttachment(attachment);
 
-    // Every connected socket also implicitly joins its own "user:<id>"
-    // and the org's "org:<id>" room, same as socket.io's connection
-    // handler always did - only per-channel membership needs an explicit
-    // join message from the client.
-
     // Presence: mark the user online if this is their FIRST open
     // connection (they could have more than one - another tab, a phone).
-    // The old Node version tracked this with a plain in-memory Map of
-    // connection counts, which doesn't work here - Workers can evict
-    // this whole object between requests, wiping any such counter. This
-    // DO already knows exactly who's connected via getWebSockets(), so
-    // that's used as the source of truth instead of a separate counter.
-    const socketsBeforeAccept = this.ctx.getWebSockets();
-    const alreadyOnline = socketsBeforeAccept.some((s) => {
+    const allSockets = this.ctx.getWebSockets();
+    const alreadyOnline = allSockets.some((s) => {
+      if (s === server) return false; // exclude this socket itself
       const a = s.deserializeAttachment() as SocketAttachment | null;
       return a?.userId === userId;
     });
-    console.log(`[RealtimeRoom] CONNECT userId=${userId} existingSocketsForThisUser=${socketsBeforeAccept.filter((s) => (s.deserializeAttachment() as SocketAttachment | null)?.userId === userId).length} totalSocketsBefore=${socketsBeforeAccept.length} willMarkOnline=${!alreadyOnline}`);
+    const existingCount = allSockets.filter((s) => s !== server && (s.deserializeAttachment() as SocketAttachment | null)?.userId === userId).length;
+    console.log(`[RealtimeRoom] CONNECT userId=${userId} existingSocketsForThisUser=${existingCount} totalAfterAccept=${allSockets.length} willMarkOnline=${!alreadyOnline}`);
     if (!alreadyOnline) {
       await pool.query(`UPDATE users SET status = 'online', last_seen_at = now() WHERE id = $1`, [userId]);
       this.broadcastToEveryone('presence:update', { userId, status: 'online' });

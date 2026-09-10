@@ -154,8 +154,13 @@ export async function createNotificationsForMany(
     params
   );
 
+  // Hydrate each before pushing live - same as createNotification (single)
+  // does. Without this, the bell shows "New announcement" or "Someone
+  // mentioned you" with no title, no preview and no clickable link until
+  // the page is refreshed, because the bare INSERT row has no joined data.
   for (const notification of result.rows) {
-    emitToUser(notification.user_id, 'notification:new', notification);
+    const enriched = await hydrateOne(notification);
+    emitToUser(notification.user_id, 'notification:new', enriched);
   }
 
   return result.rows;

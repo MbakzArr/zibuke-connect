@@ -20,7 +20,7 @@ export async function loginUser(input: LoginInput) {
   const email = input.email.trim().toLowerCase();
 
   const result = await pool.query(
-    'SELECT id, organization_id, email, password_hash, role FROM users WHERE email = $1 AND deleted_at IS NULL',
+    'SELECT id, organization_id, email, password_hash, role, user_type FROM users WHERE email = $1 AND deleted_at IS NULL',
     [email]
   );
   const user = result.rows[0];
@@ -38,6 +38,7 @@ export async function loginUser(input: LoginInput) {
     userId: user.id,
     organizationId: user.organization_id,
     role: user.role,
+    userType: user.user_type,
   };
 
   const accessToken = signAccessToken(tokenPayload);
@@ -51,7 +52,7 @@ export async function loginUser(input: LoginInput) {
   return {
     accessToken,
     refreshToken,
-    user: { id: user.id, email: user.email, role: user.role },
+    user: { id: user.id, email: user.email, role: user.role, userType: user.user_type },
   };
 }
 
@@ -61,6 +62,7 @@ export function refreshAccessToken(refreshToken: string) {
     userId: payload.userId,
     organizationId: payload.organizationId,
     role: payload.role,
+    userType: payload.userType,
   });
   return { accessToken };
 }

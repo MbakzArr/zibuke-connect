@@ -4,6 +4,7 @@ export interface TokenPayload {
   userId: string;
   organizationId: string;
   role: string;
+  userType: string;
 }
 
 export function signAccessToken(payload: TokenPayload): string {

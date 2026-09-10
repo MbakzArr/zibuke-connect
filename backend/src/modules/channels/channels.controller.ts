@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pool } from '../../db/pool';
 import {
   listChannelsForUser,
   getChannel,
@@ -55,6 +56,13 @@ export async function create(req: Request, res: Response) {
     const { name, departmentId, isPrivate, visibleToCandidates } = req.body;
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ error: 'Channel name is required' });
+    }
+    // Candidates get a deliberately curated, admin-controlled experience
+    // (only channels explicitly opened up to them) - letting them create
+    // their own channels would work against that entirely.
+    const requester = await pool.query('SELECT user_type FROM users WHERE id = $1', [req.user!.userId]);
+    if (requester.rows[0]?.user_type === 'candidate') {
+      return res.status(403).json({ error: 'Candidates cannot create channels' });
     }
     // Same rule as announcements: marking a channel visible to candidates
     // is a full-admin call, not something a department_admin decides,

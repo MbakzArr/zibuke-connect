@@ -85,12 +85,16 @@ export async function history(req: Request, res: Response) {
       return res.status(404).json({ error: 'Channel not found' });
     }
 
-    // Must be a member to read a private channel or DM's history.
-    if (channel.is_private || channel.is_dm) {
-      const member = await isMember(channelId, req.user!.userId);
-      if (!member) {
-        return res.status(403).json({ error: 'You are not a member of this channel' });
-      }
+    // Must be a member to read history - a public channel appearing in
+    // Browse Channels (so it can be discovered and requested) is not the
+    // same as being allowed to read what's already been said in it.
+    // Previously this check only applied to private channels and DMs,
+    // which meant anyone could read a public channel's full message
+    // history just by knowing its id - including while their own join
+    // request was still pending approval.
+    const member = await isMember(channelId, req.user!.userId);
+    if (!member) {
+      return res.status(403).json({ error: 'You are not a member of this channel' });
     }
 
     let limit = parseInt(String(req.query.limit ?? '30'), 10);

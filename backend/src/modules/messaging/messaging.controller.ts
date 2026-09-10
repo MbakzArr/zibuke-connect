@@ -99,7 +99,7 @@ export async function history(req: Request, res: Response) {
 
     const before = req.query.before ? String(req.query.before) : undefined;
 
-    const messages = await getMessages(channelId, limit, before);
+    const messages = await getMessages(channelId, req.user!.userId, limit, before);
     return res.json({ messages });
   } catch (err) {
     console.error('Message history error:', err);

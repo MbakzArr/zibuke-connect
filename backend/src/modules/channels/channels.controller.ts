@@ -13,6 +13,8 @@ import {
   listDmsForUser,
   listBrowsableChannels,
   markChannelRead,
+  clearChannelForUser,
+  deleteChannelForEveryone,
   getDmOtherReadAt,
   searchChannelsAndDms,
 } from './channels.service';
@@ -158,6 +160,43 @@ export async function leave(req: Request, res: Response) {
   } catch (err) {
     console.error('Leave channel error:', err);
     return res.status(500).json({ error: 'Could not leave channel' });
+  }
+}
+
+// Personal only - clears this channel from just the caller's own sidebar
+// and hides its history for them, without removing their membership.
+// Anyone who's a member can do this to their own view; no special
+// permission needed since it never affects anyone else.
+export async function clearForMe(req: Request, res: Response) {
+  try {
+    const member = await isMember(req.params.id, req.user!.userId);
+    if (!member) {
+      return res.status(403).json({ error: 'You are not a member of this channel' });
+    }
+    await clearChannelForUser(req.params.id, req.user!.userId);
+    return res.json({ cleared: true });
+  } catch (err) {
+    console.error('Clear channel error:', err);
+    return res.status(500).json({ error: 'Could not clear channel' });
+  }
+}
+
+// Real deletion - affects everyone. Only the channel's creator or an
+// admin can do this, and it's checked server-side (deleteChannelForEveryone
+// re-verifies ownership itself rather than trusting the client).
+export async function remove(req: Request, res: Response) {
+  try {
+    const result = await deleteChannelForEveryone(req.params.id, req.user!.userId, req.user!.role === 'admin');
+    if (!result.ok) {
+      if (result.reason === 'NOT_FOUND') {
+        return res.status(404).json({ error: 'Channel not found' });
+      }
+      return res.status(403).json({ error: 'Only the channel creator or an admin can delete this channel' });
+    }
+    return res.json({ deleted: true });
+  } catch (err) {
+    console.error('Delete channel error:', err);
+    return res.status(500).json({ error: 'Could not delete channel' });
   }
 }
 

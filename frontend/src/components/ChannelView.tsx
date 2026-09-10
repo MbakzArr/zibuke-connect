@@ -413,6 +413,40 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   // make sense the same way). Confirms first since it's not easily undone
   // from here - rejoining is possible via Browse Channels for a public
   // one, but you lose it from "Your channels" either way.
+  // "Clear" is personal only - hides this channel from just your own
+  // sidebar and hides its history for you, without leaving. You stay a
+  // member and can keep posting; a new message makes it reappear on its
+  // own. Genuinely different from Leave, which removes membership.
+  async function clearThisChannel() {
+    if (!window.confirm(`Clear #${channel.name} from your sidebar? You'll stay a member and can keep chatting - it'll reappear if there's new activity.`)) {
+      return;
+    }
+    try {
+      await channelsApi.clear(channel.id);
+      showToast(`Cleared #${channel.name} from your sidebar.`, { type: 'success' });
+      onLeftChannel?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Could not clear this channel.', { type: 'error' });
+    }
+  }
+
+  // Real deletion - affects everyone, not just you. Only the channel's
+  // creator or an admin can do this (same canManageRequests rule already
+  // used for join-request approval), and it's double-confirmed given how
+  // final it is for everyone else in the channel.
+  async function deleteThisChannel() {
+    if (!window.confirm(`Delete #${channel.name} for everyone? This can't be undone from here, and everyone in it will lose access.`)) {
+      return;
+    }
+    try {
+      await channelsApi.delete(channel.id);
+      showToast(`Deleted #${channel.name}.`, { type: 'success' });
+      onLeftChannel?.();
+    } catch (err: any) {
+      showToast(err?.message || 'Could not delete this channel.', { type: 'error' });
+    }
+  }
+
   async function leaveThisChannel() {
     if (!window.confirm(`Leave #${channel.name}? You can rejoin later from Browse Channels if it's public.`)) {
       return;
@@ -716,6 +750,16 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           {canManageRequests && pendingRequestCount > 0 && (
             <button className="chan-requests-btn" onClick={() => setShowJoinRequests(true)} title="Pending join requests">
               🔔 Requests <span className="chan-requests-badge">{pendingRequestCount}</span>
+            </button>
+          )}
+          {!dmTitle && (
+            <button className="chan-clear-btn" onClick={clearThisChannel} title="Clear from your sidebar (you stay a member)">
+              🧹 Clear
+            </button>
+          )}
+          {canManageRequests && (
+            <button className="chan-delete-btn" onClick={deleteThisChannel} title="Delete this channel for everyone">
+              🗑️ Delete
             </button>
           )}
           {!dmTitle && (

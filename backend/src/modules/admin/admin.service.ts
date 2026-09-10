@@ -8,7 +8,7 @@ const ROLES = ['admin', 'department_admin', 'employee'];
 // or a removed person at all.
 export async function listAllUsers(organizationId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.email, u.role, u.status, u.deleted_at, u.department_id, u.user_type,
+    `SELECT u.id, u.email, u.role, u.status, u.deleted_at, u.department_id, u.user_type, u.can_assign_candidate_tasks,
             p.full_name, p.job_title, d.name AS department_name
      FROM users u
      LEFT JOIN employee_profiles p ON p.user_id = u.id
@@ -163,6 +163,23 @@ export async function changeRole(organizationId: string, userId: string, role: s
      WHERE id = $2 AND organization_id = $3 AND deleted_at IS NULL
      RETURNING id, role`,
     [role, userId, organizationId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error('NOT_FOUND');
+  }
+  return result.rows[0];
+}
+
+// Grants (or revokes) permission for a specific employee to assign tasks
+// to candidates, without making them a department_admin or full admin
+// just for this one purpose - admins can always do this regardless of
+// the flag.
+export async function setCandidateTaskPermission(organizationId: string, userId: string, allowed: boolean) {
+  const result = await pool.query(
+    `UPDATE users SET can_assign_candidate_tasks = $1
+     WHERE id = $2 AND organization_id = $3 AND deleted_at IS NULL
+     RETURNING id, can_assign_candidate_tasks`,
+    [allowed, userId, organizationId]
   );
   if (result.rows.length === 0) {
     throw new Error('NOT_FOUND');

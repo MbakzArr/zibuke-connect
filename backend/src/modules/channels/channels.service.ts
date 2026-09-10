@@ -64,13 +64,18 @@ function channelVisibilityExpr(scope: ChannelViewerScope, deptParamIndex: number
   return { sql: 'c.department_id IS NULL' };
 }
 
+// The sidebar list - ONLY channels you've actually joined, public or
+// private, department-scoped or not. Public channels you haven't joined
+// yet are discovered through Browse Channels instead, not shown here with
+// a join prompt - this used to also list every visible-but-unjoined
+// public channel, which made the sidebar the place people accidentally
+// discovered channels in, cluttering it with things they hadn't actually
+// joined. Department/candidate visibility no longer needs computing here
+// at all - membership is now the only gate, and if you're a member you
+// see it regardless of whether your department later changed.
 export async function listChannelsForUser(organizationId: string, userId: string) {
-  const scope = await getChannelViewerScope(userId);
-  const visibility = channelVisibilityExpr(scope, 3);
-  const params = visibility.param ? [organizationId, userId, visibility.param] : [organizationId, userId];
-
   const result = await pool.query(
-    `SELECT DISTINCT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_by, c.created_at,
+    `SELECT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_by, c.created_at,
             (SELECT COUNT(*) FROM channel_members cm2 WHERE cm2.channel_id = c.id) AS member_count,
             EXISTS (
               SELECT 1 FROM messages m
@@ -83,14 +88,20 @@ export async function listChannelsForUser(organizationId: string, userId: string
                 )
             ) AS has_unread
      FROM channels c
-     LEFT JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
+     JOIN channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
      LEFT JOIN departments d ON d.id = c.department_id
      WHERE c.organization_id = $1
        AND c.is_dm = false
-       AND (c.is_private = false OR cm.user_id IS NOT NULL)
-       AND (cm.user_id IS NOT NULL OR ${visibility.sql})
+       AND c.deleted_at IS NULL
+       AND (
+         cm.cleared_at IS NULL
+         OR EXISTS (
+           SELECT 1 FROM messages m2
+           WHERE m2.channel_id = c.id AND m2.deleted_at IS NULL AND m2.created_at > cm.cleared_at
+         )
+       )
      ORDER BY c.name ASC`,
-    params
+    [organizationId, userId]
   );
   return result.rows;
 }
@@ -154,6 +165,38 @@ export async function isMember(channelId: string, userId: string): Promise<boole
     [channelId, userId]
   );
   return result.rows.length > 0;
+}
+
+// "Clear" - personal only, keeps membership. Hides the channel from just
+// this person's sidebar and hides history before this point in THEIR
+// view only; a new message after this point makes it reappear naturally,
+// and they can keep posting into it the whole time. Genuinely different
+// from Leave (which removes membership) - this exists specifically so
+// people can keep a tidy sidebar without losing access to a channel they
+// might come back to.
+export async function clearChannelForUser(channelId: string, userId: string): Promise<void> {
+  await pool.query(
+    'UPDATE channel_members SET cleared_at = now() WHERE channel_id = $1 AND user_id = $2',
+    [channelId, userId]
+  );
+}
+
+// Real deletion - affects everyone, not just the caller. Restricted to
+// the channel's creator or an admin (same rule already used for
+// approving join requests, kept consistent rather than inventing a new
+// permission model). Soft delete: messages are left in the database for
+// audit, same as individual message deletion already works in this app -
+// the channel just becomes invisible and unopenable for everyone.
+export async function deleteChannelForEveryone(channelId: string, requesterId: string, requesterIsAdmin: boolean): Promise<{ ok: true } | { ok: false; reason: 'NOT_FOUND' | 'FORBIDDEN' }> {
+  const channel = await pool.query('SELECT created_by FROM channels WHERE id = $1 AND deleted_at IS NULL', [channelId]);
+  if (channel.rows.length === 0) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+  if (!requesterIsAdmin && channel.rows[0].created_by !== requesterId) {
+    return { ok: false, reason: 'FORBIDDEN' };
+  }
+  await pool.query('UPDATE channels SET deleted_at = now() WHERE id = $1', [channelId]);
+  return { ok: true };
 }
 
 export async function createChannel(input: CreateChannelInput) {
@@ -511,6 +554,7 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
      WHERE c.organization_id = $1
        AND c.is_dm = false
        AND c.is_private = false
+       AND c.deleted_at IS NULL
        AND (cm2.user_id IS NOT NULL OR ${visibility.sql})
      ORDER BY c.name ASC`,
     params

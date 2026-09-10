@@ -103,6 +103,13 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
         clickable: true,
       };
     }
+    if (n.type === 'channel_added') {
+      return {
+        title: `You were added to #${n.join_channel_name || 'a channel'}`,
+        preview: null,
+        clickable: true,
+      };
+    }
     if (n.type === 'channel_join_rejected') {
       return {
         title: `Your request to join #${n.join_channel_name || 'a channel'} was declined`,
@@ -161,6 +168,11 @@ export default function NotificationBell({ onNavigateToChannel, onOpenAnnounceme
       return;
     }
     if (n.type === 'channel_join_approved' && n.join_channel_id) {
+      onNavigateToChannel(n.join_channel_id);
+      setOpen(false);
+      return;
+    }
+    if (n.type === 'channel_added' && n.join_channel_id) {
       onNavigateToChannel(n.join_channel_id);
       setOpen(false);
       return;

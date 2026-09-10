@@ -6,7 +6,7 @@ import { emitToUser } from '../messaging/realtime';
 // they don't touch sockets themselves. If the user is connected, they get
 // it instantly; if not, it's waiting in their list when they next load.
 
-type NotificationType = 'mention' | 'announcement' | 'announcement_mention' | 'dm' | 'event' | 'department_head' | 'task_assigned' | 'reaction' | 'channel_join_request' | 'channel_join_approved' | 'channel_join_rejected';
+type NotificationType = 'mention' | 'announcement' | 'announcement_mention' | 'dm' | 'event' | 'department_head' | 'task_assigned' | 'reaction' | 'channel_join_request' | 'channel_join_approved' | 'channel_join_rejected' | 'channel_added';
 
 interface CreateNotificationInput {
   userId: string;
@@ -121,9 +121,11 @@ async function hydrateOne(n: any) {
     );
     return { ...n, ...r.rows[0] };
   }
-  if (n.type === 'channel_join_approved' || n.type === 'channel_join_rejected') {
-    // source_id is the channel's id here (the request itself is resolved
-    // and no longer the useful thing to point at - see resolveJoinRequest).
+  if (n.type === 'channel_join_approved' || n.type === 'channel_join_rejected' || n.type === 'channel_added') {
+    // source_id is the channel's id here (for join_approved/rejected, the
+    // request itself is resolved and no longer the useful thing to point
+    // at - see resolveJoinRequest; for channel_added there was never a
+    // request in the first place).
     const r = await pool.query(`SELECT name AS join_channel_name, id AS join_channel_id FROM channels WHERE id = $1`, [n.source_id]);
     return { ...n, ...r.rows[0] };
   }
@@ -220,7 +222,7 @@ export async function listNotifications(userId: string, unreadOnly = false) {
      LEFT JOIN employee_profiles requester
        ON requester.user_id = jcr.user_id
      LEFT JOIN channels jc2
-       ON jc2.id = n.source_id AND n.type IN ('channel_join_approved', 'channel_join_rejected')
+       ON jc2.id = n.source_id AND n.type IN ('channel_join_approved', 'channel_join_rejected', 'channel_added')
      WHERE n.user_id = $1
        ${unreadOnly ? 'AND n.is_read = false' : ''}
      ORDER BY n.created_at DESC

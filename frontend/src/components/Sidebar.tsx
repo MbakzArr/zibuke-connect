@@ -44,6 +44,7 @@ export default function Sidebar({
   const [newName, setNewName] = useState('');
   const [newDepartmentId, setNewDepartmentId] = useState('');
   const [newVisibleToCandidates, setNewVisibleToCandidates] = useState(false);
+  const [newIsPrivate, setNewIsPrivate] = useState(false);
   const [submittingChannel, setSubmittingChannel] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   // Collapsed by default - it doesn't need to sit visible in the sidebar
@@ -70,6 +71,22 @@ export default function Sidebar({
     socket.on('channel:activity', onActivity);
     return () => {
       socket.off('channel:activity', onActivity);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
+
+  // Being added directly to a channel (see AddMemberModal) should make it
+  // appear in the sidebar right away, not just silently show up next time
+  // something else happens to trigger a reload - loadChannels() is cheap
+  // and this only fires when it actually matters.
+  useEffect(() => {
+    if (!socket) return;
+    function onAdded() {
+      loadChannels();
+    }
+    socket.on('channel:added', onAdded);
+    return () => {
+      socket.off('channel:added', onAdded);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
@@ -105,9 +122,10 @@ export default function Sidebar({
     if (!name || submittingChannel) return;
     setSubmittingChannel(true);
     try {
-      const { channel } = await channelsApi.create(name, false, newDepartmentId || null, newVisibleToCandidates);
+      const { channel } = await channelsApi.create(name, newIsPrivate, newDepartmentId || null, newVisibleToCandidates);
       setNewName('');
       setNewDepartmentId('');
+      setNewIsPrivate(false);
       setNewVisibleToCandidates(false);
       setCreating(false);
       await loadChannels();
@@ -168,6 +186,14 @@ export default function Sidebar({
               placeholder="channel-name"
               autoFocus
             />
+            <label className="side-create-candidates">
+              <input
+                type="checkbox"
+                checked={newIsPrivate}
+                onChange={(e) => setNewIsPrivate(e.target.checked)}
+              />
+              🔒 Private (invite only, not discoverable)
+            </label>
             {departments.length > 0 && (
               <select
                 className="side-create-dept"
@@ -181,7 +207,7 @@ export default function Sidebar({
                 ))}
               </select>
             )}
-            {showAnnouncementAction && (
+            {showAnnouncementAction && !newIsPrivate && (
               <label className="side-create-candidates">
                 <input
                   type="checkbox"

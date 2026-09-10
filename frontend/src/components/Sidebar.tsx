@@ -41,6 +41,7 @@ export default function Sidebar({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDepartmentId, setNewDepartmentId] = useState('');
+  const [newVisibleToCandidates, setNewVisibleToCandidates] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   // Collapsed by default - it doesn't need to sit visible in the sidebar
   // all the time, just a click away.
@@ -99,9 +100,10 @@ export default function Sidebar({
   async function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    const { channel } = await channelsApi.create(name, false, newDepartmentId || null);
+    const { channel } = await channelsApi.create(name, false, newDepartmentId || null, newVisibleToCandidates);
     setNewName('');
     setNewDepartmentId('');
+    setNewVisibleToCandidates(false);
     setCreating(false);
     await loadChannels();
     onSelectChannel(channel);
@@ -168,6 +170,16 @@ export default function Sidebar({
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
+            )}
+            {showAnnouncementAction && (
+              <label className="side-create-candidates">
+                <input
+                  type="checkbox"
+                  checked={newVisibleToCandidates}
+                  onChange={(e) => setNewVisibleToCandidates(e.target.checked)}
+                />
+                Also visible to candidates
+              </label>
             )}
             <button className="side-create-go" onClick={handleCreate} disabled={!newName.trim()}>Create</button>
           </div>

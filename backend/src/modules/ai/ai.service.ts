@@ -248,7 +248,7 @@ async function getViewerDepartment(userId: string, isAdmin: boolean): Promise<st
 // user's own tasks. The AI is never handed anything through a new,
 // separate permission path - it only ever sees a bounded slice of what
 // the asker could already see themselves.
-export async function askQuestion(organizationId: string, userId: string, isAdmin: boolean, question: string): Promise<string> {
+export async function askQuestion(organizationId: string, userId: string, isAdmin: boolean, isCandidate: boolean, question: string): Promise<string> {
   const trimmed = question.trim();
   if (!trimmed) {
     throw new Error('EMPTY_TEXT');
@@ -259,7 +259,7 @@ export async function askQuestion(organizationId: string, userId: string, isAdmi
 
   const viewerDept = await getViewerDepartment(userId, isAdmin);
   const [announcements, myTasks, eventsResult] = await Promise.all([
-    listAnnouncements(organizationId, viewerDept),
+    listAnnouncements(organizationId, viewerDept, isCandidate),
     listMyTasks(organizationId, userId),
     pool.query(
       `SELECT title, starts_at FROM events WHERE organization_id = $1 AND starts_at >= now() ORDER BY starts_at ASC LIMIT ${MAX_CONTEXT_EVENTS}`,

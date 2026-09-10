@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pool } from '../../db/pool';
 import { isMember } from '../channels/channels.service';
 import { getMessageById } from '../messaging/messaging.service';
 import { summarizeChannel, rewriteText, extractTask, askQuestion } from './ai.service';
@@ -102,10 +103,13 @@ export async function ask(req: Request, res: Response) {
     if (typeof question !== 'string') {
       return res.status(400).json({ error: 'question is required' });
     }
+    const self = await pool.query('SELECT user_type FROM users WHERE id = $1', [req.user!.userId]);
+    const isCandidate = self.rows[0]?.user_type === 'candidate';
     const answer = await askQuestion(
       req.user!.organizationId,
       req.user!.userId,
       req.user!.role === 'admin',
+      isCandidate,
       question
     );
     return res.json({ answer });

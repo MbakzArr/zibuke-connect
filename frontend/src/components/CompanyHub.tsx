@@ -637,21 +637,24 @@ function AddEventForm({ people, onCreated }: { people: Person[]; onCreated: (e: 
 }
 
 function NewAnnouncement({ onPosted }: { onPosted: (a: Announcement) => void }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const [visibleToCandidates, setVisibleToCandidates] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function post() {
     if (!title.trim() || !content.trim()) return;
     setBusy(true);
     try {
-      const { announcement } = await announcementsApi.create(title.trim(), content.trim(), departmentId);
+      const { announcement } = await announcementsApi.create(title.trim(), content.trim(), departmentId, visibleToCandidates);
       onPosted(announcement);
       setTitle('');
       setContent('');
       setDepartmentId(null);
+      setVisibleToCandidates(false);
       setOpen(false);
     } finally {
       setBusy(false);
@@ -672,6 +675,16 @@ function NewAnnouncement({ onPosted }: { onPosted: (a: Announcement) => void }) 
         placeholder="What would you like to share?"
         rows={2}
       />
+      {user?.role === 'admin' && (
+        <label className="side-create-candidates">
+          <input
+            type="checkbox"
+            checked={visibleToCandidates}
+            onChange={(e) => setVisibleToCandidates(e.target.checked)}
+          />
+          Also visible to candidates
+        </label>
+      )}
       <div className="hub-post-actions">
         <button className="hub-post-cancel" onClick={() => setOpen(false)}>Cancel</button>
         <button className="hub-post-send" onClick={post} disabled={busy}>

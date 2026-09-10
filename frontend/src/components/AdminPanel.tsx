@@ -247,6 +247,7 @@ function AddEmployeeForm({ departments, onAdded }: { departments: Department[]; 
   const [fullName, setFullName] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [role, setRole] = useState('employee');
+  const [userType, setUserType] = useState('employee');
   const [departmentId, setDepartmentId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,6 +272,7 @@ function AddEmployeeForm({ departments, onAdded }: { departments: Department[]; 
         jobTitle: jobTitle.trim() || undefined,
         role,
         departmentId: departmentId || null,
+        userType,
       });
       showToast(`${fullName.trim()} added.`, { type: 'success' });
       onAdded();
@@ -297,6 +299,10 @@ function AddEmployeeForm({ departments, onAdded }: { departments: Department[]; 
         <option value="employee">Employee</option>
         <option value="department_admin">Dept admin</option>
         <option value="admin">Admin</option>
+      </select>
+      <select value={userType} onChange={(e) => setUserType(e.target.value)} title="Candidates get a restricted view - no directory, only channels and announcements explicitly opened up to them">
+        <option value="employee">Employee</option>
+        <option value="candidate">Candidate (assessment/limited access)</option>
       </select>
       {error && <p className="hub-error" role="alert">{error}</p>}
       <div className="hub-post-actions">

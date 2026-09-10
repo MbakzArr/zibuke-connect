@@ -107,9 +107,12 @@ export interface BrowsableChannel {
   department_name?: string | null;
   is_private: boolean;
   created_at: string;
+  created_by: string;
   member_count: string;
   is_member: boolean;
   has_pending_request: boolean;
+  pending_request_count: string;
+  can_manage_requests: boolean;
 }
 
 export interface JoinRequest {
@@ -246,6 +249,13 @@ export const channelsApi = {
   browse: () => apiRequest<{ channels: BrowsableChannel[] }>('/api/v1/channels/browse'),
   members: (channelId: string) =>
     apiRequest<{ members: ChannelMember[] }>(`/api/v1/channels/${channelId}/members`),
+  // Direct add, no self-request needed - creator (while still a member)
+  // or admin only, enforced server-side.
+  addMember: (channelId: string, userId: string) =>
+    apiRequest<{ added: boolean }>(`/api/v1/channels/${channelId}/members`, {
+      method: 'POST',
+      body: { userId },
+    }),
   markRead: (channelId: string) =>
     apiRequest<{ read: boolean; lastReadAt: string; previousReadAt: string | null }>(
       `/api/v1/channels/${channelId}/read`,

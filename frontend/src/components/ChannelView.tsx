@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { colorFor } from '../util/avatarColor';
 import MembersModal from './MembersModal';
 import JoinRequestsModal from './JoinRequestsModal';
+import AddMemberModal from './AddMemberModal';
 import ChannelSummaryModal from './ChannelSummaryModal';
 import CreateTaskFromMessageModal from './CreateTaskFromMessageModal';
 import ProfileModal from './ProfileModal';
@@ -69,10 +70,22 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
   const catchUpSinceRef = useRef<string | null>(null);
   const [showJoinRequests, setShowJoinRequests] = useState(false);
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
-  // Only the channel's creator, or an admin, can see/manage its join
-  // requests - matches the same rule the backend enforces, this just
-  // decides whether to even show the button. DMs don't have requests.
-  const canManageRequests = !dmTitle && !!channel.created_by && (user?.role === 'admin' || channel.created_by === user?.id);
+  const [showAddMember, setShowAddMember] = useState(false);
+  // Whether the CURRENT user is actually a member of this channel. Public
+  // channels are always visible/readable in the sidebar whether you've
+  // joined or not (that's intentional, same as Slack), but sending
+  // requires membership - this is what decides whether the composer or a
+  // "join to participate" prompt renders. Defaults true so DMs (which
+  // don't need this check - you can't view one you're not part of) and
+  // the initial render never flash a false "not a member" state.
+  const [isMember, setIsMember] = useState(true);
+  // Only the channel's creator (while still a member of it - someone who
+  // has since left shouldn't retain manage rights for a space they're no
+  // longer part of), or an admin, can see/manage its join requests and
+  // add members directly - matches the same rule the backend enforces,
+  // this just decides whether to even show the buttons. DMs don't have
+  // requests.
+  const canManageRequests = !dmTitle && !!channel.created_by && (user?.role === 'admin' || (channel.created_by === user?.id && isMember));
 
   useEffect(() => {
     if (!canManageRequests) return;
@@ -87,14 +100,6 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.id, canManageRequests]);
-  // Whether the CURRENT user is actually a member of this channel. Public
-  // channels are always visible/readable in the sidebar whether you've
-  // joined or not (that's intentional, same as Slack), but sending
-  // requires membership - this is what decides whether the composer or a
-  // "join to participate" prompt renders. Defaults true so DMs (which
-  // don't need this check - you can't view one you're not part of) and
-  // the initial render never flash a false "not a member" state.
-  const [isMember, setIsMember] = useState(true);
   // Full channel member list, kept for the @mention autocomplete below -
   // reuses the same fetch that already ran to check isMember, just also
   // keeps the full list instead of throwing it away.
@@ -752,6 +757,11 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
               🔔 Requests <span className="chan-requests-badge">{pendingRequestCount}</span>
             </button>
           )}
+          {canManageRequests && (
+            <button className="chan-add-member-btn" onClick={() => setShowAddMember(true)} title="Add someone directly, no request needed">
+              ➕ Add member
+            </button>
+          )}
           {!dmTitle && (
             <button className="chan-clear-btn" onClick={clearThisChannel} title="Clear from your sidebar (you stay a member)">
               🧹 Clear
@@ -1049,6 +1059,14 @@ export default function ChannelView({ channel, dmTitle, dmUserId, jumpToId, onOp
           channelName={channel.name}
           onClose={() => setShowJoinRequests(false)}
           onResolved={() => setPendingRequestCount((n) => Math.max(0, n - 1))}
+        />
+      )}
+
+      {showAddMember && (
+        <AddMemberModal
+          channelId={channel.id}
+          channelName={channel.name}
+          onClose={() => setShowAddMember(false)}
         />
       )}
 

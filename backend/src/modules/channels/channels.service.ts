@@ -242,9 +242,9 @@ export async function createChannel(input: CreateChannelInput) {
   }
 }
 
-// The actual membership write - shared by request-approval and any other
-// path that adds someone to a channel. Not called directly by the join
-// route anymore; see requestToJoin below for that.
+// The actual membership write - shared by request-approval, direct-add,
+// and any other path that adds someone to a channel. Not called directly
+// by the join route anymore; see requestToJoin below for that.
 async function addMember(channelId: string, userId: string) {
   await pool.query(
     `INSERT INTO channel_members (channel_id, user_id)
@@ -254,10 +254,67 @@ async function addMember(channelId: string, userId: string) {
   );
 }
 
-// Who should be asked to approve a join request: the channel's creator,
-// unless their account has been removed, in which case it falls back to
-// every admin in the org - a request should never be permanently stuck
-// just because the person who made the channel is gone.
+// Whether someone still has "creator" authority over a channel - true
+// only if they made it AND are still actually a member of it. A creator
+// who's since left shouldn't retain approval rights or the ability to
+// add people to a space they're no longer part of; admins are the
+// permanent fallback either way, so nothing is ever left unmanaged.
+async function isActiveCreator(channelId: string, createdBy: string, userId: string): Promise<boolean> {
+  if (createdBy !== userId) return false;
+  return isMember(channelId, userId);
+}
+
+export async function canManageChannel(channelId: string, createdBy: string, userId: string, userIsAdmin: boolean): Promise<boolean> {
+  if (userIsAdmin) return true;
+  return isActiveCreator(channelId, createdBy, userId);
+}
+
+// Add someone directly, bypassing the self-request flow entirely -
+// needed for private channels (which have no self-request path at all)
+// and for candidates (who can only ever request to join a channel
+// that's already marked visible to them - there was previously no way
+// to get them into ANY channel without that already being true first,
+// and no way to add them at all without them requesting themselves).
+// Same permission rule as everything else channel-management related:
+// the creator (while still a member) or an admin.
+export async function addMemberDirectly(
+  organizationId: string,
+  channelId: string,
+  userId: string,
+  requesterId: string,
+  requesterIsAdmin: boolean
+): Promise<{ ok: true } | { ok: false; reason: 'NOT_FOUND' | 'FORBIDDEN' | 'ALREADY_MEMBER' | 'USER_NOT_FOUND' }> {
+  const channel = await pool.query(
+    'SELECT created_by FROM channels WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
+    [channelId, organizationId]
+  );
+  if (channel.rows.length === 0) {
+    return { ok: false, reason: 'NOT_FOUND' };
+  }
+  const allowed = await canManageChannel(channelId, channel.rows[0].created_by, requesterId, requesterIsAdmin);
+  if (!allowed) {
+    return { ok: false, reason: 'FORBIDDEN' };
+  }
+  const target = await pool.query(
+    'SELECT id FROM users WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
+    [userId, organizationId]
+  );
+  if (target.rows.length === 0) {
+    return { ok: false, reason: 'USER_NOT_FOUND' };
+  }
+  if (await isMember(channelId, userId)) {
+    return { ok: false, reason: 'ALREADY_MEMBER' };
+  }
+  await addMember(channelId, userId);
+  return { ok: true };
+}
+
+// Who should be asked to approve a join request: the channel's creator
+// (only while they're still actually a member of it), plus every admin
+// in the org - admins are a PERMANENT backdoor, not just a fallback for
+// when the creator's account no longer exists, and a creator who's left
+// the channel shouldn't linger as an approver for a space they're no
+// longer part of.
 // Who gets notified and can approve a join request: the channel's
 // creator, PLUS every admin - admins act as a permanent backdoor for
 // every channel, not just a fallback for when a creator's account no
@@ -266,11 +323,9 @@ async function addMember(channelId: string, userId: string) {
 async function getJoinApprovers(organizationId: string, channelId: string, createdBy: string): Promise<string[]> {
   const approvers = new Set<string>();
 
-  const creator = await pool.query(
-    'SELECT id FROM users WHERE id = $1 AND organization_id = $2 AND deleted_at IS NULL',
-    [createdBy, organizationId]
-  );
-  if (creator.rows.length > 0) approvers.add(createdBy);
+  if (await isActiveCreator(channelId, createdBy, createdBy)) {
+    approvers.add(createdBy);
+  }
 
   const admins = await pool.query(
     `SELECT id FROM users WHERE organization_id = $1 AND role = 'admin' AND deleted_at IS NULL`,
@@ -547,7 +602,7 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
   const params = visibility.param ? [organizationId, userId, visibility.param] : [organizationId, userId];
 
   const result = await pool.query(
-    `SELECT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_at,
+    `SELECT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_at, c.created_by,
             (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS member_count,
             EXISTS (
               SELECT 1 FROM channel_members me
@@ -556,7 +611,8 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
             EXISTS (
               SELECT 1 FROM channel_join_requests jr
               WHERE jr.channel_id = c.id AND jr.user_id = $2 AND jr.status = 'pending'
-            ) AS has_pending_request
+            ) AS has_pending_request,
+            (SELECT COUNT(*) FROM channel_join_requests jr2 WHERE jr2.channel_id = c.id AND jr2.status = 'pending') AS pending_request_count
      FROM channels c
      LEFT JOIN departments d ON d.id = c.department_id
      LEFT JOIN channel_members cm2 ON cm2.channel_id = c.id AND cm2.user_id = $2
@@ -568,7 +624,20 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
      ORDER BY c.name ASC`,
     params
   );
-  return result.rows;
+
+  // can_manage_requests here mirrors canManageChannel exactly (admin, or
+  // creator while still a member) - this is what actually lets an admin
+  // manage join requests for a channel they're not in yet: Browse
+  // Channels is the one place they can reach that ability without
+  // needing to open the channel itself, since they may not even be able
+  // to open it (a private channel, or simply not having joined a public
+  // one) - the previous UI had no path to this at all for a non-member
+  // admin, even though the permission itself was already correctly
+  // backend-enforced.
+  return result.rows.map((row) => ({
+    ...row,
+    can_manage_requests: scope.isAdmin || (row.created_by === userId && row.is_member),
+  }));
 }
 
 // Search the channels and DMs a user can navigate to, by name. Returns

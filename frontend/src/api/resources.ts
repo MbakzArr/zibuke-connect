@@ -206,10 +206,10 @@ export const aiApi = {
 
 export const channelsApi = {
   list: () => apiRequest<{ channels: Channel[] }>('/api/v1/channels'),
-  create: (name: string, isPrivate = false, departmentId?: string | null) =>
+  create: (name: string, isPrivate = false, departmentId?: string | null, visibleToCandidates?: boolean) =>
     apiRequest<{ channel: Channel }>('/api/v1/channels', {
       method: 'POST',
-      body: { name, isPrivate, departmentId },
+      body: { name, isPrivate, departmentId, visibleToCandidates },
     }),
   // Public channels are request-to-join now, not instant - see
   // requestToJoin in the backend. The three statuses: already in the
@@ -318,10 +318,10 @@ export const messagesApi = {
 export const announcementsApi = {
   list: () => apiRequest<{ announcements: Announcement[] }>('/api/v1/announcements'),
   get: (id: string) => apiRequest<{ announcement: Announcement }>(`/api/v1/announcements/${id}`),
-  create: (title: string, content: string, departmentId?: string | null) =>
+  create: (title: string, content: string, departmentId?: string | null, visibleToCandidates?: boolean) =>
     apiRequest<{ announcement: Announcement }>('/api/v1/announcements', {
       method: 'POST',
-      body: { title, content, departmentId },
+      body: { title, content, departmentId, visibleToCandidates },
     }),
 };
 
@@ -353,6 +353,7 @@ export interface AdminUser {
   job_title: string | null;
   department_id: string | null;
   department_name: string | null;
+  user_type: string;
 }
 
 export interface Department {
@@ -401,7 +402,7 @@ export const webhooksApi = {
 
 export const adminApi = {
   listUsers: () => apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users'),
-  createEmployee: (input: { email: string; password: string; fullName: string; jobTitle?: string; role?: string; departmentId?: string | null }) =>
+  createEmployee: (input: { email: string; password: string; fullName: string; jobTitle?: string; role?: string; departmentId?: string | null; userType?: string }) =>
     apiRequest<{ user: { id: string; email: string; role: string } }>('/api/v1/admin/users', {
       method: 'POST',
       body: input,

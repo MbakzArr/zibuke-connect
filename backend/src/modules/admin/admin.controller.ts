@@ -13,7 +13,7 @@ export async function list(req: Request, res: Response) {
 
 export async function create(req: Request, res: Response) {
   try {
-    const { email, password, fullName, jobTitle, role, departmentId } = req.body;
+    const { email, password, fullName, jobTitle, role, departmentId, userType } = req.body;
     if (!email || !password || !fullName) {
       return res.status(400).json({ error: 'email, password and fullName are required' });
     }
@@ -28,6 +28,7 @@ export async function create(req: Request, res: Response) {
       jobTitle: jobTitle ? String(jobTitle).trim() : undefined,
       role,
       departmentId: departmentId || null,
+      userType,
     });
     return res.status(201).json({ user });
   } catch (err: any) {

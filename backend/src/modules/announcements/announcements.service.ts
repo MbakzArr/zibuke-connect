@@ -12,9 +12,12 @@ interface CreateAnnouncementInput {
   title: string;
   content: string;
   createdBy: string;
+  visibleToCandidates?: boolean;
 }
 
-export async function listAnnouncements(organizationId: string, departmentId: string | null | undefined) {
+export async function listAnnouncements(organizationId: string, departmentId: string | null | undefined, isCandidate = false) {
+  // isCandidate short-circuits everything else - a candidate sees ONLY
+  // announcements explicitly opted in for them, regardless of department.
   // departmentId === undefined -> no filter at all (full admins see every
   //   announcement across the org, department-scoped or not).
   // departmentId === null -> viewer isn't in any department, so only
@@ -22,7 +25,9 @@ export async function listAnnouncements(organizationId: string, departmentId: st
   // departmentId === '<uuid>' -> org-wide OR that specific department.
   const params: any[] = [organizationId];
   let deptClause = '';
-  if (departmentId === null) {
+  if (isCandidate) {
+    deptClause = 'AND a.visible_to_candidates = true';
+  } else if (departmentId === null) {
     deptClause = 'AND a.department_id IS NULL';
   } else if (departmentId !== undefined) {
     params.push(departmentId);
@@ -30,7 +35,7 @@ export async function listAnnouncements(organizationId: string, departmentId: st
   }
 
   const result = await pool.query(
-    `SELECT a.id, a.department_id, a.title, a.content, a.created_by, a.created_at,
+    `SELECT a.id, a.department_id, a.title, a.content, a.created_by, a.created_at, a.visible_to_candidates,
             d.name AS department_name,
             p.full_name AS author_name
      FROM announcements a
@@ -46,7 +51,7 @@ export async function listAnnouncements(organizationId: string, departmentId: st
 }
 
 export async function createAnnouncement(input: CreateAnnouncementInput) {
-  const { organizationId, departmentId, title, content, createdBy } = input;
+  const { organizationId, departmentId, title, content, createdBy, visibleToCandidates } = input;
 
   // If scoped to a department, confirm it belongs to this org.
   if (departmentId) {
@@ -60,10 +65,10 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
   }
 
   const result = await pool.query(
-    `INSERT INTO announcements (organization_id, department_id, title, content, created_by)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, department_id, title, content, created_by, created_at`,
-    [organizationId, departmentId || null, title, content, createdBy]
+    `INSERT INTO announcements (organization_id, department_id, title, content, created_by, visible_to_candidates)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, department_id, title, content, created_by, created_at, visible_to_candidates`,
+    [organizationId, departmentId || null, title, content, createdBy, Boolean(visibleToCandidates)]
   );
   const announcement = result.rows[0];
 
@@ -76,6 +81,12 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
   // author, so their own post appears live for them too - filtered out
   // below just for notifications, since you don't need to be notified of
   // your own post.)
+  //
+  // Candidates aren't modeled as belonging to any department, so a
+  // department-scoped audience query would never include them even when
+  // visible_to_candidates is set - they're added as an explicit extra
+  // group here instead, matching how listAnnouncements treats the flag
+  // as its own independent visibility rule, not a department membership.
   const audience = departmentId
     ? await pool.query(
         `SELECT id FROM users WHERE organization_id = $1 AND department_id = $2`,
@@ -84,6 +95,16 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
     : await pool.query(`SELECT id FROM users WHERE organization_id = $1`, [organizationId]);
 
   const audienceUserIds = audience.rows.map((r) => r.id);
+  if (visibleToCandidates) {
+    const candidates = await pool.query(
+      `SELECT id FROM users WHERE organization_id = $1 AND user_type = 'candidate'`,
+      [organizationId]
+    );
+    for (const row of candidates.rows) {
+      if (!audienceUserIds.includes(row.id)) audienceUserIds.push(row.id);
+    }
+  }
+
   const notifyUserIds = audienceUserIds.filter((id) => id !== createdBy);
   await createNotificationsForMany(notifyUserIds, 'announcement', announcement.id);
 
@@ -96,17 +117,19 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
 // Without this check, anyone who had (or guessed) an announcement's id
 // could read a department-only one directly, bypassing the list filter
 // entirely - the id itself carries no authorization on its own.
-export async function getAnnouncement(organizationId: string, announcementId: string, viewerDepartmentId: string | null | undefined) {
+export async function getAnnouncement(organizationId: string, announcementId: string, viewerDepartmentId: string | null | undefined, isCandidate = false) {
   const params: any[] = [organizationId, announcementId];
   let deptClause = '';
-  if (viewerDepartmentId === null) {
+  if (isCandidate) {
+    deptClause = 'AND a.visible_to_candidates = true';
+  } else if (viewerDepartmentId === null) {
     deptClause = 'AND a.department_id IS NULL';
   } else if (viewerDepartmentId !== undefined) {
     params.push(viewerDepartmentId);
     deptClause = `AND (a.department_id IS NULL OR a.department_id = $3)`;
   }
   const result = await pool.query(
-    `SELECT a.id, a.department_id, a.title, a.content, a.created_by, a.created_at,
+    `SELECT a.id, a.department_id, a.title, a.content, a.created_by, a.created_at, a.visible_to_candidates,
             d.name AS department_name,
             p.full_name AS author_name
      FROM announcements a

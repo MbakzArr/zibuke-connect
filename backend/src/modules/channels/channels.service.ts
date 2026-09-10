@@ -14,12 +14,61 @@ interface CreateChannelInput {
   createdBy: string;
   departmentId?: string | null;
   isPrivate?: boolean;
+  visibleToCandidates?: boolean;
 }
 
 // List the channels a user can see: every public channel in their org,
 // plus any private channel they're actually a member of. DMs are excluded
 // here, they're fetched separately so the channel list stays clean.
+// What a viewer is allowed to see, in terms of channel visibility -
+// shared by listChannelsForUser and listBrowsableChannels below, and by
+// the AI/search paths later if those ever need the same rule. Mirrors
+// exactly how announcements.service.ts scopes announcements, so someone
+// reading either query already understands the other.
+interface ChannelViewerScope {
+  isAdmin: boolean;
+  isCandidate: boolean;
+  departmentId: string | null;
+}
+
+async function getChannelViewerScope(userId: string): Promise<ChannelViewerScope> {
+  const result = await pool.query('SELECT role, department_id, user_type FROM users WHERE id = $1', [userId]);
+  const row = result.rows[0];
+  return {
+    isAdmin: row?.role === 'admin',
+    isCandidate: row?.user_type === 'candidate',
+    departmentId: row?.department_id ?? null,
+  };
+}
+
+// Admins see everything, same as everywhere else in the app. A candidate
+// sees ONLY channels explicitly opted in for candidates - this
+// completely overrides the department rule below, since a candidate
+// isn't really "in" a department at all. Everyone else sees org-wide
+// channels (no department set) plus their own department's channels -
+// unchanged from before this feature existed, since department_id was
+// only ever a label until now; every existing channel has no department
+// set, so this is a no-op for them.
+//
+// Returns a bare boolean SQL expression (no leading AND/OR) meant to be
+// combined with "already a member" via OR - being an active member of a
+// channel always keeps it visible to you regardless of this rule, the
+// same way private channels already work; you shouldn't lose sight of a
+// channel you're in just because your department later changed.
+function channelVisibilityExpr(scope: ChannelViewerScope, deptParamIndex: number): { sql: string; param?: string } {
+  if (scope.isAdmin) return { sql: 'true' };
+  if (scope.isCandidate) return { sql: 'c.visible_to_candidates = true' };
+  if (scope.departmentId) {
+    return { sql: `(c.department_id IS NULL OR c.department_id = $${deptParamIndex})`, param: scope.departmentId };
+  }
+  return { sql: 'c.department_id IS NULL' };
+}
+
 export async function listChannelsForUser(organizationId: string, userId: string) {
+  const scope = await getChannelViewerScope(userId);
+  const visibility = channelVisibilityExpr(scope, 3);
+  const params = visibility.param ? [organizationId, userId, visibility.param] : [organizationId, userId];
+
   const result = await pool.query(
     `SELECT DISTINCT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_by, c.created_at,
             (SELECT COUNT(*) FROM channel_members cm2 WHERE cm2.channel_id = c.id) AS member_count,
@@ -39,8 +88,9 @@ export async function listChannelsForUser(organizationId: string, userId: string
      WHERE c.organization_id = $1
        AND c.is_dm = false
        AND (c.is_private = false OR cm.user_id IS NOT NULL)
+       AND (cm.user_id IS NOT NULL OR ${visibility.sql})
      ORDER BY c.name ASC`,
-    [organizationId, userId]
+    params
   );
   return result.rows;
 }
@@ -107,7 +157,7 @@ export async function isMember(channelId: string, userId: string): Promise<boole
 }
 
 export async function createChannel(input: CreateChannelInput) {
-  const { organizationId, name, createdBy, departmentId, isPrivate } = input;
+  const { organizationId, name, createdBy, departmentId, isPrivate, visibleToCandidates } = input;
 
   // If the channel is tied to a department, confirm that department is in
   // the same org, so you can't attach a channel to another org's department.
@@ -126,10 +176,10 @@ export async function createChannel(input: CreateChannelInput) {
     await client.query('BEGIN');
 
     const channelResult = await client.query(
-      `INSERT INTO channels (organization_id, department_id, name, is_private, is_dm, created_by)
-       VALUES ($1, $2, $3, $4, false, $5)
-       RETURNING id, name, department_id, is_private, is_dm, created_by, created_at`,
-      [organizationId, departmentId || null, name, isPrivate || false, createdBy]
+      `INSERT INTO channels (organization_id, department_id, name, is_private, is_dm, created_by, visible_to_candidates)
+       VALUES ($1, $2, $3, $4, false, $5, $6)
+       RETURNING id, name, department_id, is_private, is_dm, created_by, created_at, visible_to_candidates`,
+      [organizationId, departmentId || null, name, isPrivate || false, createdBy, Boolean(visibleToCandidates)]
     );
     const channel = channelResult.rows[0];
 
@@ -440,6 +490,10 @@ export async function getDmRecipient(channelId: string, senderId: string): Promi
 // and join channels they're not in yet. Private channels and DMs are never
 // listed here.
 export async function listBrowsableChannels(organizationId: string, userId: string) {
+  const scope = await getChannelViewerScope(userId);
+  const visibility = channelVisibilityExpr(scope, 3);
+  const params = visibility.param ? [organizationId, userId, visibility.param] : [organizationId, userId];
+
   const result = await pool.query(
     `SELECT c.id, c.name, c.department_id, d.name AS department_name, c.is_private, c.created_at,
             (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS member_count,
@@ -453,11 +507,13 @@ export async function listBrowsableChannels(organizationId: string, userId: stri
             ) AS has_pending_request
      FROM channels c
      LEFT JOIN departments d ON d.id = c.department_id
+     LEFT JOIN channel_members cm2 ON cm2.channel_id = c.id AND cm2.user_id = $2
      WHERE c.organization_id = $1
        AND c.is_dm = false
        AND c.is_private = false
+       AND (cm2.user_id IS NOT NULL OR ${visibility.sql})
      ORDER BY c.name ASC`,
-    [organizationId, userId]
+    params
   );
   return result.rows;
 }

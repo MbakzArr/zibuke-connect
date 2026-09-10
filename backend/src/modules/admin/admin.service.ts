@@ -8,7 +8,7 @@ const ROLES = ['admin', 'department_admin', 'employee'];
 // or a removed person at all.
 export async function listAllUsers(organizationId: string) {
   const result = await pool.query(
-    `SELECT u.id, u.email, u.role, u.status, u.deleted_at, u.department_id,
+    `SELECT u.id, u.email, u.role, u.status, u.deleted_at, u.department_id, u.user_type,
             p.full_name, p.job_title, d.name AS department_name
      FROM users u
      LEFT JOIN employee_profiles p ON p.user_id = u.id
@@ -28,6 +28,7 @@ interface CreateEmployeeInput {
   jobTitle?: string;
   role?: string;
   departmentId?: string | null;
+  userType?: string;
 }
 
 // Admin-created account: same shape as self-registration, but an admin can
@@ -38,6 +39,7 @@ export async function createEmployee(input: CreateEmployeeInput) {
   const { organizationId, password, fullName, jobTitle, departmentId } = input;
   const email = input.email.trim().toLowerCase();
   const role = input.role && ROLES.includes(input.role) ? input.role : 'employee';
+  const userType = input.userType === 'candidate' ? 'candidate' : 'employee';
 
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
   if (existing.rows.length > 0) {
@@ -61,10 +63,10 @@ export async function createEmployee(input: CreateEmployeeInput) {
     await client.query('BEGIN');
 
     const userResult = await client.query(
-      `INSERT INTO users (organization_id, email, password_hash, role, department_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (organization_id, email, password_hash, role, department_id, user_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, organization_id, email, role`,
-      [organizationId, email, passwordHash, role, departmentId || null]
+      [organizationId, email, passwordHash, role, departmentId || null, userType]
     );
     const user = userResult.rows[0];
 

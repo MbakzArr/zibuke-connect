@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { announcementsApi, type Announcement } from '../api/resources';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import AnnouncementScopePicker from './AnnouncementScopePicker';
 
 interface NewAnnouncementModalProps {
@@ -12,9 +13,11 @@ interface NewAnnouncementModalProps {
 // inline form on the hub - so posting one doesn't require navigating to the
 // hub first. Same endpoint, same validation, just reachable from anywhere.
 export default function NewAnnouncementModal({ onClose, onPosted }: NewAnnouncementModalProps) {
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [departmentId, setDepartmentId] = useState<string | null>(null);
+  const [visibleToCandidates, setVisibleToCandidates] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
@@ -24,7 +27,7 @@ export default function NewAnnouncementModal({ onClose, onPosted }: NewAnnouncem
     setBusy(true);
     setError(null);
     try {
-      const { announcement } = await announcementsApi.create(title.trim(), content.trim(), departmentId);
+      const { announcement } = await announcementsApi.create(title.trim(), content.trim(), departmentId, visibleToCandidates);
       onPosted(announcement);
       showToast('Announcement posted.', { type: 'success' });
       onClose();
@@ -52,6 +55,16 @@ export default function NewAnnouncementModal({ onClose, onPosted }: NewAnnouncem
             placeholder="What would you like to share?"
             rows={4}
           />
+          {user?.role === 'admin' && (
+            <label className="side-create-candidates">
+              <input
+                type="checkbox"
+                checked={visibleToCandidates}
+                onChange={(e) => setVisibleToCandidates(e.target.checked)}
+              />
+              Also visible to candidates
+            </label>
+          )}
           {error && <p className="hub-error" role="alert">{error}</p>}
           <div className="hub-post-actions">
             <button className="hub-post-cancel" onClick={onClose}>Cancel</button>

@@ -18,10 +18,15 @@ async function getViewerScope(req: Request): Promise<string | null | undefined> 
   return self.rows[0]?.department_id ?? null;
 }
 
+async function isViewerCandidate(req: Request): Promise<boolean> {
+  const self = await pool.query('SELECT user_type FROM users WHERE id = $1', [req.user!.userId]);
+  return self.rows[0]?.user_type === 'candidate';
+}
+
 export async function list(req: Request, res: Response) {
   try {
-    const scope = await getViewerScope(req);
-    const announcements = await listAnnouncements(req.user!.organizationId, scope);
+    const [scope, isCandidate] = await Promise.all([getViewerScope(req), isViewerCandidate(req)]);
+    const announcements = await listAnnouncements(req.user!.organizationId, scope, isCandidate);
     return res.json({ announcements });
   } catch (err) {
     console.error('List announcements error:', err);
@@ -36,13 +41,20 @@ export async function create(req: Request, res: Response) {
       return res.status(403).json({ error: 'You do not have permission to post announcements' });
     }
 
-    const { title, content } = req.body;
+    const { title, content, visibleToCandidates } = req.body;
     let { departmentId } = req.body;
     if (!title || title.trim().length === 0) {
       return res.status(400).json({ error: 'Announcement title is required' });
     }
     if (!content || content.trim().length === 0) {
       return res.status(400).json({ error: 'Announcement content is required' });
+    }
+    // Marking something visible to candidates is a full-admin call, same
+    // as posting org-wide - candidates aren't tied to any one department,
+    // so a department_admin deciding this would be deciding something
+    // outside their own department's scope.
+    if (visibleToCandidates && req.user!.role !== 'admin') {
+      return res.status(403).json({ error: 'Only an admin can make an announcement visible to candidates' });
     }
 
     // A department_admin can only ever post to THEIR OWN department, never
@@ -65,6 +77,7 @@ export async function create(req: Request, res: Response) {
       title: title.trim(),
       content: content.trim(),
       createdBy: req.user!.userId,
+      visibleToCandidates: Boolean(visibleToCandidates),
     });
 
     // Push live only to the people who are actually allowed to see this -
@@ -103,8 +116,8 @@ export async function create(req: Request, res: Response) {
 
 export async function getOne(req: Request, res: Response) {
   try {
-    const scope = await getViewerScope(req);
-    const ann = await getAnnouncement(req.user!.organizationId, req.params.id, scope);
+    const [scope, isCandidate] = await Promise.all([getViewerScope(req), isViewerCandidate(req)]);
+    const ann = await getAnnouncement(req.user!.organizationId, req.params.id, scope, isCandidate);
     if (!ann) return res.status(404).json({ error: 'Announcement not found' });
     return res.json({ announcement: ann });
   } catch (err) {

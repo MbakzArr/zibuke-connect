@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { pool } from '../../db/pool';
 import {
   searchDirectory,
   listDirectory,
@@ -20,8 +21,23 @@ function parsePagination(req: Request) {
   return { limit, offset };
 }
 
+async function isCandidate(req: Request): Promise<boolean> {
+  const self = await pool.query('SELECT user_type FROM users WHERE id = $1', [req.user!.userId]);
+  return self.rows[0]?.user_type === 'candidate';
+}
+
 export async function search(req: Request, res: Response) {
   try {
+    // Candidates can't browse or search the org directory - real
+    // employees' names, roles and contact details aren't something an
+    // outsider should be able to discover, even though every other
+    // department can see it freely. Viewing a specific profile you
+    // already know the id for (e.g. from a shared channel) is a
+    // different, narrower thing and isn't restricted here - see profile()
+    // below.
+    if (await isCandidate(req)) {
+      return res.json({ results: [] });
+    }
     const q = String(req.query.q ?? '').trim();
     if (q.length < 2) {
       return res.status(400).json({ error: 'Search query must be at least 2 characters' });
@@ -37,6 +53,9 @@ export async function search(req: Request, res: Response) {
 
 export async function list(req: Request, res: Response) {
   try {
+    if (await isCandidate(req)) {
+      return res.json({ people: [], limit: 0, offset: 0 });
+    }
     const departmentId = req.query.departmentId ? String(req.query.departmentId) : null;
     const { limit, offset } = parsePagination(req);
     const people = await listDirectory(req.user!.organizationId, departmentId, limit, offset);

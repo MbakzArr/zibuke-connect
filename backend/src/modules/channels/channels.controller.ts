@@ -50,9 +50,15 @@ export async function getOne(req: Request, res: Response) {
 
 export async function create(req: Request, res: Response) {
   try {
-    const { name, departmentId, isPrivate } = req.body;
+    const { name, departmentId, isPrivate, visibleToCandidates } = req.body;
     if (!name || name.trim().length === 0) {
       return res.status(400).json({ error: 'Channel name is required' });
+    }
+    // Same rule as announcements: marking a channel visible to candidates
+    // is a full-admin call, not something a department_admin decides,
+    // since candidates aren't tied to any one department.
+    if (visibleToCandidates && req.user!.role !== 'admin') {
+      return res.status(403).json({ error: 'Only an admin can make a channel visible to candidates' });
     }
 
     const channel = await createChannel({
@@ -61,6 +67,7 @@ export async function create(req: Request, res: Response) {
       createdBy: req.user!.userId,
       departmentId,
       isPrivate,
+      visibleToCandidates: Boolean(visibleToCandidates),
     });
     return res.status(201).json({ channel });
   } catch (err: any) {

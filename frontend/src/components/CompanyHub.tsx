@@ -531,6 +531,7 @@ export default function CompanyHub({ onOpenChannel, onMessagePerson, onOpenConve
           announcement={openAnn}
           reactions={annReactions[openAnn.id]}
           onClose={() => setOpenAnn(null)}
+          onDeleted={(id) => setAnnouncements((prev) => prev.filter((a) => a.id !== id))}
         />
       )}
 
